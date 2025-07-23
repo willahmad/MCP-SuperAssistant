@@ -39,9 +39,9 @@ export interface AdapterConfig {
 
 export const defaultState: MCPToggleState = {
   mcpEnabled: false,
-  autoInsert: false,
-  autoSubmit: false,
-  autoExecute: false,
+  autoInsert: true,
+  autoSubmit: true,
+  autoExecute: true,
 };
 
 export let toggleState: MCPToggleState = { ...defaultState };

@@ -8,10 +8,10 @@ import { registerSiteAdapter } from '../utils/siteAdapter';
 import { adapterRegistry } from './adapterRegistry';
 import { PerplexityAdapter } from './perplexityAdapter';
 import { AiStudioAdapter } from './aistudioAdapter';
-import { ChatGptAdapter } from './chatgptAdapter';
-import { GrokAdapter } from './grokAdapter';
+// import { ChatGptAdapter } from './chatgptAdapter';
+// import { GrokAdapter } from './grokAdapter';
 import { logMessage } from '../utils/helpers';
-import { GeminiAdapter } from './geminiAdapter';
+// import { GeminiAdapter } from './geminiAdapter';
 import { OpenRouterAdapter } from './openrouterAdapter';
 import type { SiteAdapter } from '../utils/siteAdapter';
 import { DeepSeekAdapter } from './deepseekAdapter';
@@ -31,9 +31,10 @@ interface AdapterInfo {
 const adapterInfos: AdapterInfo[] = [
   { AdapterClass: PerplexityAdapter, hostnames: ['perplexity.ai'] },
   { AdapterClass: AiStudioAdapter, hostnames: ['aistudio.google.com'] },
-  { AdapterClass: ChatGptAdapter, hostnames: ['chat.openai.com', 'chatgpt.com'] },
-  { AdapterClass: GrokAdapter, hostnames: ['grok.x.ai'] },
-  { AdapterClass: GeminiAdapter, hostnames: ['gemini.google.com'] },
+  // NOTE: ChatGPT legacy adapter removed to prioritize new plugin adapter
+  // { AdapterClass: ChatGptAdapter, hostnames: ['chat.openai.com', 'chatgpt.com'] },
+  // { AdapterClass: GrokAdapter, hostnames: ['grok.x.ai'] },
+  // { AdapterClass: GeminiAdapter, hostnames: ['gemini.google.com'] },
   { AdapterClass: OpenRouterAdapter, hostnames: ['openrouter.ai'] },
   { AdapterClass: DeepSeekAdapter, hostnames: ['chat.deepseek.com'] },
   { AdapterClass: KagiAdapter, hostnames: ['kagi.com'] },
@@ -214,9 +215,9 @@ try {
 // Export getter functions for adapters that will lazy-initialize them when requested
 export const perplexityAdapter = () => initializeAdapter(PerplexityAdapter);
 export const aistudioAdapter = () => initializeAdapter(AiStudioAdapter);
-export const chatGptAdapter = () => initializeAdapter(ChatGptAdapter);
-export const grokAdapter = () => initializeAdapter(GrokAdapter);
-export const geminiAdapter = () => initializeAdapter(GeminiAdapter);
+// export const chatGptAdapter = () => initializeAdapter(ChatGptAdapter);
+// export const grokAdapter = () => initializeAdapter(GrokAdapter);
+// export const geminiAdapter = () => initializeAdapter(GeminiAdapter);
 export const openrouterAdapter = () => initializeAdapter(OpenRouterAdapter);
 export const deepseekAdapter = () => initializeAdapter(DeepSeekAdapter);
 export const kagiAdapter = () => initializeAdapter(KagiAdapter);
