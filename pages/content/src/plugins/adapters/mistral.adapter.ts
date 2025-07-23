@@ -18,7 +18,7 @@ export class MistralAdapter extends BaseAdapterPlugin {
     'text-insertion',
     'form-submission',
     'file-attachment',
-    'dom-manipulation'
+    'dom-manipulation',
   ];
 
   // CSS selectors for Mistral's UI elements
@@ -27,22 +27,25 @@ export class MistralAdapter extends BaseAdapterPlugin {
     // Primary chat input selector - the ProseMirror editor div
     CHAT_INPUT: 'div.Editor-indented.ProseMirror[contenteditable="true"], div[data-placeholder="Ask le Chat"]',
     // Submit button selectors (multiple fallbacks)
-    SUBMIT_BUTTON: 'button[aria-label="Send question"], .ms-auto.flex.gap-2 button[type="submit"], button.bg-state-primary',
+    SUBMIT_BUTTON:
+      'button[aria-label="Send question"], .ms-auto.flex.gap-2 button[type="submit"], button.bg-state-primary',
     // File upload related selectors
     FILE_UPLOAD_BUTTON: 'button[data-testid="attach-file-button"], button[aria-label="Add files"]',
     FILE_INPUT: 'input[name="file-upload"], input[type="file"][multiple]',
     // Main panel and container selectors
     MAIN_PANEL: '.relative.flex.w-full.flex-col.p-4',
     // Drop zones for file attachment - targeting the ProseMirror editor and containers
-    DROP_ZONE: 'div.Editor-indented.ProseMirror[contenteditable="true"], div[data-radix-scroll-area-viewport], .relative.flex.w-full.flex-col.p-4',
+    DROP_ZONE:
+      'div.Editor-indented.ProseMirror[contenteditable="true"], div[data-radix-scroll-area-viewport], .relative.flex.w-full.flex-col.p-4',
     // File preview elements - updated for Mistral's specific file attachment UI
-    FILE_PREVIEW: 'div.relative.rounded-md.border.border-default.bg-muted, .file-preview, .attachment-preview, .uploaded-file',
+    FILE_PREVIEW:
+      'div.relative.rounded-md.border.border-default.bg-muted, .file-preview, .attachment-preview, .uploaded-file',
     // Button insertion points (for MCP popover) - targeting the button container area
     BUTTON_INSERTION_CONTAINER: '.flex.w-full.max-w-full.items-center.justify-start.gap-4, .ms-auto.flex.gap-2',
     // Tools button selector
     TOOLS_BUTTON: 'button[data-testid="tools-selection-button"]',
     // Alternative insertion points
-    FALLBACK_INSERTION: '.relative.flex.w-full.flex-col.p-4, .chat-input-container'
+    FALLBACK_INSERTION: '.relative.flex.w-full.flex-col.p-4, .chat-input-container',
   };
 
   // URL patterns for navigation tracking
@@ -53,12 +56,12 @@ export class MistralAdapter extends BaseAdapterPlugin {
   private mcpPopoverContainer: HTMLElement | null = null;
   private mutationObserver: MutationObserver | null = null;
   private popoverCheckInterval: NodeJS.Timeout | null = null;
-  
+
   // Setup state tracking
   private storeEventListenersSetup: boolean = false;
   private domObserversSetup: boolean = false;
   private uiIntegrationSetup: boolean = false;
-  
+
   // Instance tracking for debugging
   private static instanceCount = 0;
   private instanceId: number;
@@ -67,13 +70,17 @@ export class MistralAdapter extends BaseAdapterPlugin {
     super();
     MistralAdapter.instanceCount++;
     this.instanceId = MistralAdapter.instanceCount;
-    console.log(`[MistralAdapter] Instance #${this.instanceId} created. Total instances: ${MistralAdapter.instanceCount}`);
+    console.log(
+      `[MistralAdapter] Instance #${this.instanceId} created. Total instances: ${MistralAdapter.instanceCount}`,
+    );
   }
 
   async initialize(context: PluginContext): Promise<void> {
     // Guard against multiple initialization
     if (this.currentStatus === 'initializing' || this.currentStatus === 'active') {
-      this.context?.logger.warn(`Mistral adapter instance #${this.instanceId} already initialized or active, skipping re-initialization`);
+      this.context?.logger.warn(
+        `Mistral adapter instance #${this.instanceId} already initialized or active, skipping re-initialization`,
+      );
       return;
     }
 
@@ -105,7 +112,7 @@ export class MistralAdapter extends BaseAdapterPlugin {
     // Emit activation event for store synchronization
     this.context.eventBus.emit('adapter:activated', {
       pluginName: this.name,
-      timestamp: Date.now()
+      timestamp: Date.now(),
     });
   }
 
@@ -131,7 +138,7 @@ export class MistralAdapter extends BaseAdapterPlugin {
     // Emit deactivation event
     this.context.eventBus.emit('adapter:deactivated', {
       pluginName: this.name,
-      timestamp: Date.now()
+      timestamp: Date.now(),
     });
   }
 
@@ -154,7 +161,7 @@ export class MistralAdapter extends BaseAdapterPlugin {
     // Final cleanup
     this.cleanupUIIntegration();
     this.cleanupDOMObservers();
-    
+
     // Reset all setup flags
     this.storeEventListenersSetup = false;
     this.domObserversSetup = false;
@@ -166,7 +173,9 @@ export class MistralAdapter extends BaseAdapterPlugin {
    * Enhanced with better selector handling and ProseMirror editor support
    */
   async insertText(text: string, options?: { targetElement?: HTMLElement }): Promise<boolean> {
-    this.context.logger.info(`Attempting to insert text into Mistral chat input: ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`);
+    this.context.logger.info(
+      `Attempting to insert text into Mistral chat input: ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`,
+    );
 
     let targetElement: HTMLElement | null = null;
 
@@ -201,17 +210,18 @@ export class MistralAdapter extends BaseAdapterPlugin {
       if (targetElement.classList.contains('ProseMirror')) {
         // For ProseMirror editor, we need to handle HTML structure properly
         const existingParagraphs = targetElement.querySelectorAll('p');
-        
+
         // Check if there's existing content (not just the empty trailing break)
-        const hasExistingContent = existingParagraphs.length > 1 || 
-          (existingParagraphs.length === 1 && 
-           existingParagraphs[0].textContent && 
-           existingParagraphs[0].textContent.trim() !== '');
-        
+        const hasExistingContent =
+          existingParagraphs.length > 1 ||
+          (existingParagraphs.length === 1 &&
+            existingParagraphs[0].textContent &&
+            existingParagraphs[0].textContent.trim() !== '');
+
         // Split text by newlines to create proper paragraph structure
         // Keep empty lines to preserve blank lines in the text
         const textLines = text.split('\n');
-        
+
         if (hasExistingContent) {
           // Find the last paragraph that has content
           let lastContentParagraph = null;
@@ -222,37 +232,37 @@ export class MistralAdapter extends BaseAdapterPlugin {
               break;
             }
           }
-          
+
           if (lastContentParagraph) {
             // Remove the trailing break from the last content paragraph
             const trailingBreak = lastContentParagraph.querySelector('br.ProseMirror-trailingBreak');
             if (trailingBreak) {
               trailingBreak.remove();
             }
-            
+
             // Add the first line to the existing paragraph
             if (textLines.length > 0) {
               lastContentParagraph.appendChild(document.createElement('br'));
               lastContentParagraph.appendChild(document.createTextNode(textLines[0]));
-                 // Add remaining lines as new paragraphs
-            for (let i = 1; i < textLines.length; i++) {
-              const newP = document.createElement('p');
-              if (textLines[i].trim() === '') {
-                // For empty lines, add a break element to maintain the blank line
-                const br = document.createElement('br');
-                br.className = 'ProseMirror-trailingBreak';
-                newP.appendChild(br);
-              } else {
-                newP.textContent = textLines[i];
+              // Add remaining lines as new paragraphs
+              for (let i = 1; i < textLines.length; i++) {
+                const newP = document.createElement('p');
+                if (textLines[i].trim() === '') {
+                  // For empty lines, add a break element to maintain the blank line
+                  const br = document.createElement('br');
+                  br.className = 'ProseMirror-trailingBreak';
+                  newP.appendChild(br);
+                } else {
+                  newP.textContent = textLines[i];
+                }
+                targetElement.insertBefore(newP, targetElement.lastElementChild);
               }
-              targetElement.insertBefore(newP, targetElement.lastElementChild);
-            }
             }
           }
         } else {
           // No existing content, replace the empty paragraph structure
           targetElement.innerHTML = '';
-          
+
           // Create paragraphs for each line
           textLines.forEach((line, index) => {
             const p = document.createElement('p');
@@ -266,7 +276,7 @@ export class MistralAdapter extends BaseAdapterPlugin {
             }
             targetElement.appendChild(p);
           });
-          
+
           // Add the trailing break paragraph that ProseMirror expects
           const trailingP = document.createElement('p');
           const trailingBr = document.createElement('br');
@@ -274,11 +284,11 @@ export class MistralAdapter extends BaseAdapterPlugin {
           trailingP.appendChild(trailingBr);
           targetElement.appendChild(trailingP);
         }
-        
+
         // Dispatch input events for ProseMirror
         targetElement.dispatchEvent(new Event('input', { bubbles: true }));
         targetElement.dispatchEvent(new Event('change', { bubbles: true }));
-        
+
         // Move cursor to end
         const selection = window.getSelection();
         if (selection) {
@@ -301,19 +311,25 @@ export class MistralAdapter extends BaseAdapterPlugin {
       }
 
       // Emit success event to the new event system
-      const finalContent = targetElement.classList.contains('ProseMirror') ? 
-        targetElement.textContent || '' : 
-        (targetElement as HTMLInputElement).value || '';
-        
-      this.emitExecutionCompleted('insertText', { text }, {
-        success: true,
-        originalLength: originalValue.length,
-        newLength: text.length,
-        totalLength: finalContent.length,
-        editorType: targetElement.classList.contains('ProseMirror') ? 'ProseMirror' : 'standard'
-      });
+      const finalContent = targetElement.classList.contains('ProseMirror')
+        ? targetElement.textContent || ''
+        : (targetElement as HTMLInputElement).value || '';
 
-      this.context.logger.info(`Text inserted successfully into ${targetElement.classList.contains('ProseMirror') ? 'ProseMirror' : 'standard'} editor`);
+      this.emitExecutionCompleted(
+        'insertText',
+        { text },
+        {
+          success: true,
+          originalLength: originalValue.length,
+          newLength: text.length,
+          totalLength: finalContent.length,
+          editorType: targetElement.classList.contains('ProseMirror') ? 'ProseMirror' : 'standard',
+        },
+      );
+
+      this.context.logger.info(
+        `Text inserted successfully into ${targetElement.classList.contains('ProseMirror') ? 'ProseMirror' : 'standard'} editor`,
+      );
       return true;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -368,13 +384,17 @@ export class MistralAdapter extends BaseAdapterPlugin {
       submitButton.click();
 
       // Emit success event to the new event system
-      this.emitExecutionCompleted('submitForm', {
-        formElement: options?.formElement?.tagName || 'unknown'
-      }, {
-        success: true,
-        method: 'submitButton.click',
-        buttonSelector: selectors.find(s => document.querySelector(s.trim()) === submitButton)
-      });
+      this.emitExecutionCompleted(
+        'submitForm',
+        {
+          formElement: options?.formElement?.tagName || 'unknown',
+        },
+        {
+          success: true,
+          method: 'submitButton.click',
+          buttonSelector: selectors.find(s => document.querySelector(s.trim()) === submitButton),
+        },
+      );
 
       this.context.logger.info('Mistral chat input submitted successfully');
       return true;
@@ -408,7 +428,7 @@ export class MistralAdapter extends BaseAdapterPlugin {
 
       // Method 1: Try direct file input manipulation
       let success = await this.attachFileDirectly(file);
-      
+
       if (!success) {
         // Method 2: Fallback to drag-drop simulation
         success = await this.attachFileViaDragDrop(file);
@@ -417,17 +437,21 @@ export class MistralAdapter extends BaseAdapterPlugin {
       if (success) {
         // Check for file preview to confirm success
         const previewFound = await this.checkFilePreview();
-        
-        this.emitExecutionCompleted('attachFile', {
-          fileName: file.name,
-          fileType: file.type,
-          fileSize: file.size,
-          inputElement: options?.inputElement?.tagName || 'unknown'
-        }, {
-          success: true,
-          previewFound,
-          method: 'direct-input'
-        });
+
+        this.emitExecutionCompleted(
+          'attachFile',
+          {
+            fileName: file.name,
+            fileType: file.type,
+            fileSize: file.size,
+            inputElement: options?.inputElement?.tagName || 'unknown',
+          },
+          {
+            success: true,
+            previewFound,
+            method: 'direct-input',
+          },
+        );
         this.context.logger.info(`File attached successfully: ${file.name}`);
         return true;
       } else {
@@ -445,9 +469,11 @@ export class MistralAdapter extends BaseAdapterPlugin {
   private async attachFileDirectly(file: File): Promise<boolean> {
     try {
       console.log('[system] Attempting direct file attachment via drag simulation on ProseMirror editor');
-      
+
       // Find the ProseMirror editor (drop zone) instead of textarea
-      const proseMirrorEditor = document.querySelector('div.Editor-indented.ProseMirror[contenteditable="true"]') as HTMLElement;
+      const proseMirrorEditor = document.querySelector(
+        'div.Editor-indented.ProseMirror[contenteditable="true"]',
+      ) as HTMLElement;
       if (!proseMirrorEditor) {
         console.warn('[system] ProseMirror editor drop zone not found');
         return false;
@@ -461,7 +487,7 @@ export class MistralAdapter extends BaseAdapterPlugin {
       const dragEnterEvent = new DragEvent('dragenter', {
         bubbles: true,
         cancelable: true,
-        dataTransfer: dataTransfer
+        dataTransfer: dataTransfer,
       });
       proseMirrorEditor.dispatchEvent(dragEnterEvent);
 
@@ -469,7 +495,7 @@ export class MistralAdapter extends BaseAdapterPlugin {
       const dragOverEvent = new DragEvent('dragover', {
         bubbles: true,
         cancelable: true,
-        dataTransfer: dataTransfer
+        dataTransfer: dataTransfer,
       });
       proseMirrorEditor.dispatchEvent(dragOverEvent);
 
@@ -477,7 +503,7 @@ export class MistralAdapter extends BaseAdapterPlugin {
       const dropEvent = new DragEvent('drop', {
         bubbles: true,
         cancelable: true,
-        dataTransfer: dataTransfer
+        dataTransfer: dataTransfer,
       });
       proseMirrorEditor.dispatchEvent(dropEvent);
 
@@ -492,7 +518,7 @@ export class MistralAdapter extends BaseAdapterPlugin {
   private async attachFileViaDragDrop(file: File): Promise<boolean> {
     try {
       console.log('[system] Attempting file attachment via drag-drop simulation');
-      
+
       // Load drop listener script into page context
       const success = await this.injectFileDropListener();
       if (!success) {
@@ -513,7 +539,7 @@ export class MistralAdapter extends BaseAdapterPlugin {
           lastModified: file.lastModified,
           fileData: dataUrl,
         },
-        '*'
+        '*',
       );
 
       console.log('[system] Drag-drop simulation message sent');
@@ -550,8 +576,8 @@ export class MistralAdapter extends BaseAdapterPlugin {
 
     // Check if we're on a supported Mistral page (not just the homepage)
     const supportedPatterns = [
-      /^https:\/\/chat\.mistral\.ai\/.*/,  // All chat.mistral.ai pages
-      /^https:\/\/chat\.mistral\.ai\/chat\/.*/,  // Chat pages specifically
+      /^https:\/\/chat\.mistral\.ai\/.*/, // All chat.mistral.ai pages
+      /^https:\/\/chat\.mistral\.ai\/chat\/.*/, // Chat pages specifically
     ];
 
     const isSupported = supportedPatterns.some(pattern => pattern.test(currentUrl));
@@ -634,14 +660,14 @@ export class MistralAdapter extends BaseAdapterPlugin {
     this.context.logger.debug(`Setting up store event listeners for Mistral adapter instance #${this.instanceId}`);
 
     // Listen for tool execution events from the store
-    this.context.eventBus.on('tool:execution-completed', (data) => {
+    this.context.eventBus.on('tool:execution-completed', data => {
       this.context.logger.debug('Tool execution completed:', data);
       // Handle auto-actions based on store state
       this.handleToolExecutionCompleted(data);
     });
 
     // Listen for UI state changes
-    this.context.eventBus.on('ui:sidebar-toggle', (data) => {
+    this.context.eventBus.on('ui:sidebar-toggle', data => {
       this.context.logger.debug('Sidebar toggled:', data);
     });
 
@@ -657,10 +683,10 @@ export class MistralAdapter extends BaseAdapterPlugin {
     this.context.logger.debug(`Setting up DOM observers for Mistral adapter instance #${this.instanceId}`);
 
     // Set up mutation observer to detect page changes and re-inject UI if needed
-    this.mutationObserver = new MutationObserver((mutations) => {
+    this.mutationObserver = new MutationObserver(mutations => {
       let shouldReinject = false;
 
-      mutations.forEach((mutation) => {
+      mutations.forEach(mutation => {
         if (mutation.type === 'childList') {
           // Check if our MCP popover was removed
           if (!document.getElementById('mcp-popover-container')) {
@@ -678,9 +704,9 @@ export class MistralAdapter extends BaseAdapterPlugin {
     // Start observing
     this.mutationObserver.observe(document.body, {
       childList: true,
-      subtree: true
+      subtree: true,
     });
-    
+
     this.domObserversSetup = true;
   }
 
@@ -688,7 +714,9 @@ export class MistralAdapter extends BaseAdapterPlugin {
     // Allow multiple calls for UI integration (for re-injection after page changes)
     // but log it for debugging
     if (this.uiIntegrationSetup) {
-      this.context.logger.debug(`UI integration already set up for instance #${this.instanceId}, re-injecting for page changes`);
+      this.context.logger.debug(
+        `UI integration already set up for instance #${this.instanceId}, re-injecting for page changes`,
+      );
     } else {
       this.context.logger.debug(`Setting up UI integration for Mistral adapter instance #${this.instanceId}`);
       this.uiIntegrationSetup = true;
@@ -704,7 +732,7 @@ export class MistralAdapter extends BaseAdapterPlugin {
   }
 
   private async waitForPageReady(): Promise<void> {
-    return new Promise((resolve) => {
+    return new Promise(resolve => {
       const checkReady = () => {
         // Check if the page has the necessary elements
         const insertionPoint = this.findButtonInsertionPoint();
@@ -810,7 +838,9 @@ export class MistralAdapter extends BaseAdapterPlugin {
     }
 
     // Try alternative Tools button selectors
-    const toolsButtonAlt = document.querySelector('button:has(p:contains("Tools")), button[aria-label*="Tools"], button[title*="Tools"]');
+    const toolsButtonAlt = document.querySelector(
+      'button:has(p:contains("Tools")), button[aria-label*="Tools"], button[title*="Tools"]',
+    );
     if (toolsButtonAlt && toolsButtonAlt.parentElement) {
       this.context.logger.debug('Found Tools button (alternative selector), placing MCP popover next to it');
       return { container: toolsButtonAlt.parentElement, insertAfter: toolsButtonAlt };
@@ -828,13 +858,13 @@ export class MistralAdapter extends BaseAdapterPlugin {
     // Try fallback selectors
     const fallbackSelectors = [
       '.input-actions',
-      '.chat-actions', 
+      '.chat-actions',
       '.message-actions',
       '.input-area .actions',
       '.chat-input-actions',
       '.conversation-input .actions',
       '.chat-input-container',
-      '.input-area'
+      '.input-area',
     ];
 
     for (const selector of fallbackSelectors) {
@@ -892,30 +922,36 @@ export class MistralAdapter extends BaseAdapterPlugin {
 
     try {
       // Import React and ReactDOM dynamically to avoid bundling issues
-      import('react').then(React => {
-        import('react-dom/client').then(ReactDOM => {
-          import('../../components/mcpPopover/mcpPopover').then(({ MCPPopover }) => {
-            // Create toggle state manager that integrates with new stores
-            const toggleStateManager = this.createToggleStateManager();
+      import('react')
+        .then(React => {
+          import('react-dom/client')
+            .then(ReactDOM => {
+              import('../../components/mcpPopover/mcpPopover')
+                .then(({ MCPPopover }) => {
+                  // Create toggle state manager that integrates with new stores
+                  const toggleStateManager = this.createToggleStateManager();
 
-            // Create React root and render
-            const root = ReactDOM.createRoot(container);
-            root.render(
-              React.createElement(MCPPopover, {
-                toggleStateManager: toggleStateManager
-              })
-            );
+                  // Create React root and render
+                  const root = ReactDOM.createRoot(container);
+                  root.render(
+                    React.createElement(MCPPopover, {
+                      toggleStateManager: toggleStateManager,
+                    }),
+                  );
 
-            this.context.logger.info('MCP popover rendered successfully with new architecture');
-          }).catch(error => {
-            this.context.logger.error('Failed to import MCPPopover component:', error);
-          });
-        }).catch(error => {
-          this.context.logger.error('Failed to import ReactDOM:', error);
+                  this.context.logger.info('MCP popover rendered successfully with new architecture');
+                })
+                .catch(error => {
+                  this.context.logger.error('Failed to import MCPPopover component:', error);
+                });
+            })
+            .catch(error => {
+              this.context.logger.error('Failed to import ReactDOM:', error);
+            });
+        })
+        .catch(error => {
+          this.context.logger.error('Failed to import React:', error);
         });
-      }).catch(error => {
-        this.context.logger.error('Failed to import React:', error);
-      });
     } catch (error) {
       this.context.logger.error('Failed to render MCP popover:', error);
     }
@@ -931,7 +967,7 @@ export class MistralAdapter extends BaseAdapterPlugin {
         try {
           // Get state from UI store - MCP enabled state should be the persistent MCP toggle state
           const uiState = context.stores.ui;
-          
+
           // Get the persistent MCP enabled state and other preferences
           const mcpEnabled = uiState?.mcpEnabled ?? false;
           const autoSubmitEnabled = uiState?.preferences?.autoSubmit ?? false;
@@ -942,7 +978,7 @@ export class MistralAdapter extends BaseAdapterPlugin {
             mcpEnabled: mcpEnabled, // Use the persistent MCP state
             autoInsert: autoSubmitEnabled,
             autoSubmit: autoSubmitEnabled,
-            autoExecute: false // Default for now, can be extended
+            autoExecute: false, // Default for now, can be extended
           };
         } catch (error) {
           context.logger.error('Error getting toggle state:', error);
@@ -951,13 +987,15 @@ export class MistralAdapter extends BaseAdapterPlugin {
             mcpEnabled: false,
             autoInsert: false,
             autoSubmit: false,
-            autoExecute: false
+            autoExecute: false,
           };
         }
       },
 
       setMCPEnabled: (enabled: boolean) => {
-        context.logger.debug(`Setting MCP ${enabled ? 'enabled' : 'disabled'} - controlling sidebar visibility via MCP state`);
+        context.logger.debug(
+          `Setting MCP ${enabled ? 'enabled' : 'disabled'} - controlling sidebar visibility via MCP state`,
+        );
 
         try {
           // Primary method: Control MCP state through UI store (which will automatically control sidebar)
@@ -966,7 +1004,7 @@ export class MistralAdapter extends BaseAdapterPlugin {
             context.logger.debug(`MCP state set to: ${enabled} via UI store`);
           } else {
             context.logger.warn('UI store setMCPEnabled method not available');
-            
+
             // Fallback: Control sidebar visibility directly if MCP state setter not available
             if (context.stores.ui?.setSidebarVisibility) {
               context.stores.ui.setSidebarVisibility(enabled, 'mcp-popover-toggle-fallback');
@@ -992,7 +1030,9 @@ export class MistralAdapter extends BaseAdapterPlugin {
             context.logger.warn('activeSidebarManager not available on window - will rely on UI store only');
           }
 
-          context.logger.info(`MCP toggle completed: MCP ${enabled ? 'enabled' : 'disabled'}, sidebar ${enabled ? 'shown' : 'hidden'}`);
+          context.logger.info(
+            `MCP toggle completed: MCP ${enabled ? 'enabled' : 'disabled'}, sidebar ${enabled ? 'shown' : 'hidden'}`,
+          );
         } catch (error) {
           context.logger.error('Error in setMCPEnabled:', error);
         }
@@ -1036,11 +1076,11 @@ export class MistralAdapter extends BaseAdapterPlugin {
         if (popoverContainer) {
           const currentState = stateManager.getState();
           const event = new CustomEvent('mcp:update-toggle-state', {
-            detail: { toggleState: currentState }
+            detail: { toggleState: currentState },
           });
           popoverContainer.dispatchEvent(event);
         }
-      }
+      },
     };
 
     return stateManager;
@@ -1073,13 +1113,13 @@ export class MistralAdapter extends BaseAdapterPlugin {
       const listenerUrl = this.context.chrome.runtime.getURL('dragDropListener.js');
       const scriptEl = document.createElement('script');
       scriptEl.src = listenerUrl;
-      
+
       await new Promise<void>((resolve, reject) => {
         scriptEl.onload = () => resolve();
         scriptEl.onerror = () => reject(new Error('Failed to load drop listener script'));
         (document.head || document.documentElement).appendChild(scriptEl);
       });
-      
+
       scriptEl.remove();
       console.log('[system] File drop listener injected successfully for Mistral');
       return true;
@@ -1108,14 +1148,18 @@ export class MistralAdapter extends BaseAdapterPlugin {
         const filePreview = document.querySelector(this.selectors.FILE_PREVIEW);
         if (filePreview) {
           // Additional verification - check if it contains file-like content
-          const hasFileContent = filePreview.textContent?.includes('.md') || 
-                                filePreview.textContent?.includes('.pdf') ||
-                                filePreview.textContent?.includes('.txt') ||
-                                filePreview.textContent?.includes('.doc') ||
-                                filePreview.querySelector('.text-sm.leading-6.font-medium');
-          
+          const hasFileContent =
+            filePreview.textContent?.includes('.md') ||
+            filePreview.textContent?.includes('.pdf') ||
+            filePreview.textContent?.includes('.txt') ||
+            filePreview.textContent?.includes('.doc') ||
+            filePreview.querySelector('.text-sm.leading-6.font-medium');
+
           if (hasFileContent) {
-            console.log(`[system] File preview found after ${checkAttempts[attemptCount]}ms:`, filePreview.textContent?.trim());
+            console.log(
+              `[system] File preview found after ${checkAttempts[attemptCount]}ms:`,
+              filePreview.textContent?.trim(),
+            );
             this.context.logger.info('File preview element found after attachment');
             resolve(true);
             return;
@@ -1145,8 +1189,8 @@ export class MistralAdapter extends BaseAdapterPlugin {
         parameters,
         result,
         timestamp: Date.now(),
-        status: 'success'
-      }
+        status: 'success',
+      },
     });
   }
 
@@ -1154,7 +1198,7 @@ export class MistralAdapter extends BaseAdapterPlugin {
     this.context.eventBus.emit('tool:execution-failed', {
       toolName,
       error,
-      callId: this.generateCallId()
+      callId: this.generateCallId(),
     });
   }
 
@@ -1171,7 +1215,7 @@ export class MistralAdapter extends BaseAdapterPlugin {
     try {
       // Check if there's an active sidebar manager
       const activeSidebarManager = (window as any).activeSidebarManager;
-      
+
       if (!activeSidebarManager) {
         this.context.logger.warn('No active sidebar manager found after navigation');
         return;
@@ -1179,7 +1223,6 @@ export class MistralAdapter extends BaseAdapterPlugin {
 
       // Sidebar manager exists, just ensure MCP popover connection is working
       this.ensureMCPPopoverConnection();
-      
     } catch (error) {
       this.context.logger.error('Error checking sidebar state after navigation:', error);
     }
@@ -1190,7 +1233,7 @@ export class MistralAdapter extends BaseAdapterPlugin {
    */
   private ensureMCPPopoverConnection(): void {
     this.context.logger.info('Ensuring MCP popover connection after navigation');
-    
+
     try {
       // Check if MCP popover is still injected
       if (!this.isMCPPopoverInjected()) {
@@ -1230,7 +1273,7 @@ export class MistralAdapter extends BaseAdapterPlugin {
     // Emit page change event to stores
     this.context.eventBus.emit('app:site-changed', {
       site: url,
-      hostname: window.location.hostname
+      hostname: window.location.hostname,
     });
   }
 
@@ -1244,7 +1287,7 @@ export class MistralAdapter extends BaseAdapterPlugin {
       // Emit deactivation event using available event type
       this.context.eventBus.emit('adapter:deactivated', {
         pluginName: this.name,
-        timestamp: Date.now()
+        timestamp: Date.now(),
       });
     } else {
       // Re-setup for new host
@@ -1264,21 +1307,21 @@ export class MistralAdapter extends BaseAdapterPlugin {
   private async validateDropZone(): Promise<boolean> {
     try {
       console.log('[system] Validating drop zone availability before injection');
-      
+
       // Split the DROP_ZONE selectors and try each one
       const dropSelectors = this.selectors.DROP_ZONE.split(', ').map(s => s.trim());
-      
+
       for (const selector of dropSelectors) {
         const element = document.querySelector(selector);
         if (element) {
           console.log(`[system] Drop zone validated with selector: ${selector}`);
-          
+
           // Store the working selector in window for dragDropListener.js to use
           (window as any).mistralDropZoneSelector = selector;
           return true;
         }
       }
-      
+
       console.warn('[system] No drop zone found during validation');
       return false;
     } catch (error) {

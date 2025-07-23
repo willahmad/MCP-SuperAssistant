@@ -12,6 +12,7 @@ export { T3ChatAdapter } from './adapters/t3chat.adapter';
 export { AIStudioAdapter } from './adapters/aistudio.adapter';
 export { MistralAdapter } from './adapters/mistral.adapter';
 export { GitHubCopilotAdapter } from './adapters/ghcopilot.adapter';
+export { ChatGPTAdapter } from './adapters/chatgpt.adapter';
 export { SidebarPlugin } from './sidebar.plugin';
 export { createPluginContext } from './plugin-context';
 
@@ -37,6 +38,6 @@ if (process.env.NODE_ENV === 'development') {
     async initialize() {
       const { initializePluginRegistry } = await import('./plugin-registry');
       return initializePluginRegistry();
-    }
+    },
   };
 }
