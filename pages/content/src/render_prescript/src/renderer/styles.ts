@@ -1008,6 +1008,7 @@ export const styles = `
     border-radius: var(--border-radius-sm);
     font-size: 0.9em;
     contain: layout style;
+    display: none; /* Hidden from view while keeping functionality */
   }
   
   /* Consolidated history panel theme styles */
@@ -1044,7 +1045,7 @@ export const styles = `
     cursor: pointer;
     transition: all var(--transition-normal);
     box-shadow: 0 1px 3px rgba(0,0,0,0.12);
-    display: flex;
+    display: none; /* Hidden from view while keeping functionality */
     align-items: center;
     justify-content: center;
     will-change: transform, box-shadow;

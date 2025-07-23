@@ -42,7 +42,7 @@ function getCurrentAdapter(): any {
     return null;
   } catch (error) {
     console.error('[AdapterAccess] Error getting current adapter:', error);
-    
+
     // Final fallback to legacy system
     try {
       const legacyAdapter = window.mcpAdapter || window.getCurrentAdapter?.();
@@ -53,7 +53,7 @@ function getCurrentAdapter(): any {
     } catch (fallbackError) {
       console.error('[AdapterAccess] Fallback adapter access also failed:', fallbackError);
     }
-    
+
     return null;
   }
 }
@@ -97,6 +97,142 @@ const websiteName = window.location.hostname
   .toLowerCase()
   .replace(/^www\./i, '')
   .split('.')[0];
+
+/**
+ * Inject CSS to hide manual action buttons while keeping Show Raw XML button visible
+ * This creates a cleaner UI since automation handles all actions
+ */
+function injectButtonHidingCSS(): void {
+  // Check if CSS is already injected to avoid duplicates
+  if (document.getElementById('mcp-button-hiding-css')) {
+    return;
+  }
+
+  const style = document.createElement('style');
+  style.id = 'mcp-button-hiding-css';
+  style.textContent = `
+    /* Hide manual action buttons - automation handles everything */
+    .execute-button,
+    .insert-result-button,
+    .attach-file-button {
+      display: none !important;
+    }
+    
+    /* Keep Show Raw XML button visible for debugging/inspection */
+    .raw-toggle {
+      display: flex !important;
+    }
+  `;
+  
+  document.head.appendChild(style);
+  console.debug('[MCP] Injected CSS to hide manual action buttons');
+}
+
+/**
+ * Find the current input element across all supported sites
+ * Uses universal selectors that work on most LLM interfaces
+ */
+async function findCurrentInputElement(): Promise<HTMLElement | null> {
+  // Universal selectors for chat input elements
+  const selectors = [
+    // ChatGPT
+    '#prompt-textarea',
+    '.ProseMirror[contenteditable="true"]',
+    'div[contenteditable="true"][data-id*="prompt"]',
+    // Gemini
+    'div.ql-editor.textarea.new-input-ui p',
+    // Perplexity
+    'textarea[placeholder*="Ask"]',
+    'div[contenteditable="true"][data-placeholder]',
+    // General
+    'textarea[placeholder*="message"]',
+    'textarea[placeholder*="chat"]',
+    'div[contenteditable="true"]',
+    'textarea',
+  ];
+
+  for (const selector of selectors) {
+    const element = document.querySelector(selector) as HTMLElement;
+    if (element && element.offsetParent !== null) { // Check if visible
+      return element;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Simulate Enter key press on the input element
+ * This is the primary auto-submit method across all sites
+ */
+function simulateEnterKey(inputElement: HTMLElement): void {
+  try {
+    // Focus the input element first
+    inputElement.focus();
+    
+    // Create and dispatch keydown event (Enter key)
+    const keydownEvent = new KeyboardEvent('keydown', {
+      key: 'Enter',
+      code: 'Enter',
+      keyCode: 13,
+      which: 13,
+      bubbles: true,
+      cancelable: true,
+      composed: true,
+    });
+
+    // Create and dispatch keypress event
+    const keypressEvent = new KeyboardEvent('keypress', {
+      key: 'Enter',
+      code: 'Enter',
+      keyCode: 13,
+      which: 13,
+      bubbles: true,
+      cancelable: true,
+      composed: true,
+    });
+
+    // Create and dispatch keyup event
+    const keyupEvent = new KeyboardEvent('keyup', {
+      key: 'Enter',
+      code: 'Enter',
+      keyCode: 13,
+      which: 13,
+      bubbles: true,
+      cancelable: true,
+      composed: true,
+    });
+
+    // Dispatch events in sequence
+    inputElement.dispatchEvent(keydownEvent);
+    inputElement.dispatchEvent(keypressEvent);
+    inputElement.dispatchEvent(keyupEvent);
+
+    console.log('[MCP] Enter key simulation completed');
+  } catch (error) {
+    console.error('[MCP] Error simulating Enter key:', error);
+  }
+}
+
+/**
+ * Fallback method using button clicking (legacy approach)
+ * Used when keyboard simulation fails
+ */
+async function fallbackButtonSubmit(adapter: any): Promise<void> {
+  try {
+    if (typeof adapter.submitForm === 'function') {
+      const success = await adapter.submitForm();
+      console.log('[MCP] Fallback button submit (new adapter):', success);
+    } else if (typeof adapter.triggerSubmission === 'function') {
+      adapter.triggerSubmission();
+      console.log('[MCP] Fallback button submit (legacy adapter)');
+    } else {
+      console.warn('[MCP] No fallback submit method available');
+    }
+  } catch (error) {
+    console.error('[MCP] Error in fallback button submit:', error);
+  }
+}
 
 // Pre-compiled regexes for better performance
 const INVOKE_REGEX = /<invoke name="([^"]+)"(?:\s+call_id="([^"]+)")?>/;
@@ -188,6 +324,9 @@ const createOptimizedElement = (
  * @param rawContent Raw XML content to display when toggled
  */
 export const addRawXmlToggle = (blockDiv: HTMLDivElement, rawContent: string): void => {
+  // Inject CSS to hide manual action buttons
+  injectButtonHidingCSS();
+  
   // Check for existing toggle to avoid duplicates
   if (blockDiv.querySelector('.raw-toggle')) {
     return;
@@ -572,6 +711,9 @@ export const smoothlyUpdateBlockContent = (
  * @param rawContent Raw XML content containing the function call
  */
 export const addExecuteButton = (blockDiv: HTMLDivElement, rawContent: string): void => {
+  // Inject CSS to hide manual action buttons
+  injectButtonHidingCSS();
+  
   // Check for existing execute button to avoid duplicates
   if (blockDiv.querySelector('.execute-button')) {
     return;
@@ -639,8 +781,8 @@ export const addExecuteButton = (blockDiv: HTMLDivElement, rawContent: string): 
   // Cache DOM references for performance
   const buttonText = executeButton.querySelector('span')!;
 
-  // Optimized click handler with better performance and mcpClient integration
-  executeButton.onclick = async () => {
+  // Auto-execute function immediately instead of waiting for click
+  const executeFunction = async () => {
     // Batch button state changes
     executeButton.disabled = true;
     buttonText.style.display = 'none';
@@ -691,7 +833,7 @@ export const addExecuteButton = (blockDiv: HTMLDivElement, rawContent: string): 
         return;
       }
 
-      console.debug(`Executing function ${functionName}, call_id: ${callId} with arguments:`, parameters);
+      console.debug(`Auto-executing function ${functionName}, call_id: ${callId} with arguments:`, parameters);
 
       // Show results panel and loading indicator
       resultsPanel.style.display = 'block';
@@ -701,7 +843,7 @@ export const addExecuteButton = (blockDiv: HTMLDivElement, rawContent: string): 
       // Call tool using the new mcpClient async API
       try {
         const result = await mcpClient.callTool(functionName, parameters);
-        
+
         resetButtonState();
         displayResult(resultsPanel, loadingIndicator, true, result);
 
@@ -709,16 +851,15 @@ export const addExecuteButton = (blockDiv: HTMLDivElement, rawContent: string): 
         const executionData = storeExecutedFunction(functionName, callId, parameters, contentSignature);
         const historyPanel = (blockDiv.querySelector('.function-history-panel') ||
           createHistoryPanel(blockDiv, callId, contentSignature)) as HTMLDivElement;
-        
+
         // Update history panel with mcpClient reference
         updateHistoryPanel(historyPanel, executionData, mcpClient);
-        
       } catch (toolError: any) {
         resetButtonState();
-        
+
         // Enhanced error handling for connection issues
         let errorMessage = toolError instanceof Error ? toolError.message : String(toolError);
-        
+
         // Check for connection-related errors and provide better user feedback
         if (errorMessage.includes('not connected') || errorMessage.includes('connection')) {
           errorMessage = 'Connection lost. Please check your MCP server connection.';
@@ -727,25 +868,25 @@ export const addExecuteButton = (blockDiv: HTMLDivElement, rawContent: string): 
         } else if (errorMessage.includes('server unavailable') || errorMessage.includes('SERVER_UNAVAILABLE')) {
           errorMessage = 'MCP server is unavailable. Please check the server status.';
         }
-        
+
         displayResult(resultsPanel, loadingIndicator, false, errorMessage);
       }
-
     } catch (error: any) {
       resetButtonState();
       resultsPanel.style.display = 'block';
-      
+
       const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error('Execute button error:', error);
-      
-      displayResult(
-        resultsPanel,
-        loadingIndicator,
-        false,
-        `Unexpected error: ${errorMessage}`,
-      );
+      console.error('Auto-execute error:', error);
+
+      displayResult(resultsPanel, loadingIndicator, false, `Unexpected error: ${errorMessage}`);
     }
   };
+
+  // Keep click handler for manual execution if needed
+  executeButton.onclick = executeFunction;
+
+  // Auto-execute immediately
+  executeFunction();
 
   // Batch DOM operations
   fragment.appendChild(executeButton);
@@ -830,8 +971,10 @@ export const extractFunctionParameters = (rawContent: string): Record<string, an
         } else {
           // Try to parse as JSON if it looks like JSON (starts with { or [)
           const trimmedValue = value.trim();
-          if ((trimmedValue.startsWith('{') && trimmedValue.endsWith('}')) || 
-              (trimmedValue.startsWith('[') && trimmedValue.endsWith(']'))) {
+          if (
+            (trimmedValue.startsWith('{') && trimmedValue.endsWith('}')) ||
+            (trimmedValue.startsWith('[') && trimmedValue.endsWith(']'))
+          ) {
             try {
               value = JSON.parse(trimmedValue);
               if (CONFIG.debug) console.debug(`Auto-parsed JSON for parameter ${name}:`, value);
@@ -870,15 +1013,14 @@ const attachResultAsFile = async (
   // Early validation for better performance
   if (!adapter) {
     console.error('No adapter provided for file attachment.');
-    
+
     const handleUnsupported = () => {
       const originalText = button.classList.contains('insert-result-button') ? 'Insert' : 'Attach File';
-      button.textContent = 'No Adapter';
+      button.innerHTML = `${ICONS.ATTACH}<span>No Adapter</span>`;
       button.classList.add('attach-error');
 
       setTimeout(() => {
-        button.textContent = originalText;
-        button.prepend(iconSpan);
+        button.innerHTML = `${ICONS.ATTACH}<span>${originalText}</span>`;
         button.classList.remove('attach-error');
       }, 2000);
     };
@@ -890,15 +1032,14 @@ const attachResultAsFile = async (
   // Check if adapter supports file attachment using the new capability system
   if (!adapterSupportsCapability('file-attachment')) {
     console.error('Current adapter does not support file attachment.');
-    
+
     const handleUnsupported = () => {
       const originalText = button.classList.contains('insert-result-button') ? 'Insert' : 'Attach File';
-      button.textContent = 'Attach Not Supported';
+      button.innerHTML = `${ICONS.ATTACH}<span>Attach Not Supported</span>`;
       button.classList.add('attach-error');
 
       setTimeout(() => {
-        button.textContent = originalText;
-        button.prepend(iconSpan);
+        button.innerHTML = `${ICONS.ATTACH}<span>${originalText}</span>`;
         button.classList.remove('attach-error');
       }, 2000);
     };
@@ -914,8 +1055,7 @@ const attachResultAsFile = async (
 
   // Optimized button state management
   const setButtonState = (text: string, className?: string, disabled: boolean = true) => {
-    button.textContent = text;
-    button.prepend(iconSpan);
+    button.innerHTML = `${ICONS.ATTACH}<span>${text}</span>`;
     button.disabled = disabled;
 
     if (className) {
@@ -925,8 +1065,7 @@ const attachResultAsFile = async (
 
   const resetButtonState = (delay: number = 2000) => {
     setTimeout(() => {
-      button.textContent = originalButtonText;
-      button.prepend(iconSpan);
+      button.innerHTML = `${ICONS.ATTACH}<span>${originalButtonText}</span>`;
       button.classList.remove('attach-success', 'attach-error');
       button.disabled = false;
     }, delay);
@@ -939,7 +1078,7 @@ const attachResultAsFile = async (
     if (typeof adapter.attachFile === 'function') {
       try {
         const success = await adapter.attachFile(file);
-        
+
         if (success) {
           confirmationText = `Result attached as file: ${fileName}`;
           setButtonState('Attached!', 'attach-success', true);
@@ -966,7 +1105,7 @@ const attachResultAsFile = async (
         }
       } catch (error) {
         console.error('New adapter attachFile method failed:', error);
-        
+
         // For now, we'll consider it successful since it's a complex operation
         // This is optimistic handling for better UX
         confirmationText = `File attachment initiated: ${fileName}`;
@@ -992,7 +1131,7 @@ const attachResultAsFile = async (
       // Fallback: Optimistic success for adapters without explicit attachFile method
       // This maintains compatibility while providing user feedback
       console.log('Adapter does not have attachFile method, using optimistic success');
-      
+
       confirmationText = `Result prepared as file: ${fileName}`;
       setButtonState('Attached!', 'attach-success', true);
 
@@ -1094,29 +1233,97 @@ export const displayResult = (
   loadingIndicator.style.display = 'none';
 
   if (success) {
-    // Optimized success result processing
-    let rawResultText = '';
-
     // Create result content efficiently
     const resultContent = createOptimizedElement('div', {
       className: 'function-result-success',
-    });
+    }) as HTMLDivElement;
 
-    // Process result data efficiently
+    // Process result data using proper MCP content rendering
+    let rawResultText = '';
+    
     if (typeof result === 'object') {
       try {
         rawResultText = JSON.stringify(result, null, 2);
-        const pre = createOptimizedElement('pre', {
-          textContent: rawResultText,
-          styles: {
-            fontFamily: 'inherit',
-            fontSize: '13px',
-            lineHeight: '1.5',
-            padding: '0',
-            margin: '0',
-          },
-        });
-        resultContent.appendChild(pre);
+        
+        // Use the proper content rendering logic from functionResult.ts
+        const renderFunctionResultContent = (resultContent: string, contentArea: HTMLDivElement): void => {
+          try {
+            const jsonResult = JSON.parse(resultContent);
+
+            // If it's JSON and has content array, render it properly
+            if (jsonResult && jsonResult.content && Array.isArray(jsonResult.content)) {
+              // Render each content item
+              jsonResult.content.forEach((item: any) => {
+                if (item.type === 'text') {
+                  const textDiv = document.createElement('div');
+                  textDiv.className = 'function-result-text';
+                  textDiv.style.margin = '0 0 10px 0';
+                  textDiv.style.whiteSpace = 'pre-wrap';
+                  textDiv.style.wordBreak = 'break-word';
+                  textDiv.textContent = item.text;
+                  contentArea.appendChild(textDiv);
+                } else if (item.type === 'image' && item.url) {
+                  const imgContainer = document.createElement('div');
+                  imgContainer.className = 'function-result-image';
+                  imgContainer.style.margin = '10px 0';
+
+                  const img = document.createElement('img');
+                  img.src = item.url;
+                  img.alt = item.alt || 'Image';
+                  img.style.maxWidth = '100%';
+                  img.style.borderRadius = '4px';
+
+                  imgContainer.appendChild(img);
+                  contentArea.appendChild(imgContainer);
+                } else if (item.type === 'code' && item.code) {
+                  const codeContainer = document.createElement('div');
+                  codeContainer.className = 'function-result-code';
+                  codeContainer.style.margin = '10px 0';
+                  codeContainer.style.backgroundColor = 'rgba(0, 0, 0, 0.05)';
+                  codeContainer.style.borderRadius = '4px';
+                  codeContainer.style.padding = '10px';
+
+                  const pre = document.createElement('pre');
+                  pre.style.margin = '0';
+                  pre.style.whiteSpace = 'pre-wrap';
+                  pre.style.wordBreak = 'break-word';
+                  pre.style.fontFamily = 'monospace';
+                  pre.textContent = item.code;
+
+                  codeContainer.appendChild(pre);
+                  contentArea.appendChild(codeContainer);
+                } else {
+                  // For unknown types, just render as JSON
+                  const unknownDiv = document.createElement('div');
+                  unknownDiv.className = 'function-result-unknown';
+                  unknownDiv.style.margin = '5px 0';
+                  unknownDiv.style.fontFamily = 'monospace';
+                  unknownDiv.style.fontSize = '12px';
+                  unknownDiv.textContent = JSON.stringify(item, null, 2);
+                  contentArea.appendChild(unknownDiv);
+                }
+              });
+            } else {
+              // If it's JSON but not in the expected format, format it nicely
+              const pre = document.createElement('pre');
+              pre.style.margin = '0';
+              pre.style.whiteSpace = 'pre-wrap';
+              pre.style.wordBreak = 'break-word';
+              pre.style.fontFamily = 'monospace';
+              pre.textContent = JSON.stringify(jsonResult, null, 2);
+              contentArea.appendChild(pre);
+            }
+          } catch (e) {
+            // If not JSON, just display as text with proper line breaks
+            contentArea.style.whiteSpace = 'pre-wrap';
+            contentArea.style.wordBreak = 'break-word';
+            contentArea.textContent = resultContent;
+          }
+        };
+
+        // Use the proper rendering function
+        renderFunctionResultContent(rawResultText, resultContent);
+        
       } catch (e) {
         rawResultText = String(result);
         resultContent.textContent = rawResultText;
@@ -1128,6 +1335,177 @@ export const displayResult = (
 
     // Add result to panel
     resultsPanel.appendChild(resultContent);
+
+    // Auto-insert the formatted result immediately
+    const autoInsertResult = async () => {
+      const adapter = getCurrentAdapter();
+
+      if (!adapter) {
+        console.error('No adapter available for auto-insert.');
+        return;
+      }
+
+      // Check if adapter supports text insertion
+      if (!adapterSupportsCapability('text-insertion')) {
+        console.error('Current adapter does not support text insertion.');
+        return;
+      }
+
+      const wrapperText = `<function_result call_id="${callId}">\n${rawResultText}\n</function_result>`;
+
+      // Check result length and handle accordingly
+      if (rawResultText.length > MAX_INSERT_LENGTH && WEBSITE_NAME_FOR_MAX_INSERT_LENGTH_CHECK.includes(websiteName)) {
+        console.log(`Result length (${wrapperText.length}) exceeds ${MAX_INSERT_LENGTH}. Auto-attaching as file.`);
+        // Create a temporary button for auto-attachment
+        const tempButton = createOptimizedElement('button', { className: 'temp-auto-insert' }) as HTMLButtonElement;
+        const tempIcon = createOptimizedElement('span', {}) as HTMLElement;
+        
+        await attachResultAsFile(
+          adapter,
+          functionName,
+          callId,
+          wrapperText,
+          tempButton,
+          tempIcon,
+          true,
+        );
+      } else {
+        // Try the new plugin system insertText method first
+        if (typeof adapter.insertText === 'function') {
+          try {
+            const success = await adapter.insertText(wrapperText);
+
+            if (success) {
+              console.log('Auto-insert successful using new adapter method');
+              
+              // Primary submit attempt: Keyboard simulation (Enter key)
+              setTimeout(async () => {
+                const inputElement = await findCurrentInputElement();
+                if (inputElement) {
+                  console.log('Primary auto-submit: Using keyboard simulation (Enter key)');
+                  simulateEnterKey(inputElement);
+                } else {
+                  console.log('Primary auto-submit: Input element not found, falling back to button click');
+                  await fallbackButtonSubmit(adapter);
+                }
+              }, 100);
+              
+              // Fallback: Force submit after 3 seconds if content is still in input
+              setTimeout(async () => {
+                const inputElement = await findCurrentInputElement();
+                if (inputElement && inputElement.textContent && inputElement.textContent.includes('<function_result')) {
+                  console.log('Fallback: Forcing submission after timeout');
+                  simulateEnterKey(inputElement);
+                }
+              }, 3000);
+              
+              // Efficient event dispatch with requestAnimationFrame
+              requestAnimationFrame(() => {
+                document.dispatchEvent(
+                  new CustomEvent('mcp:tool-execution-complete', {
+                    detail: {
+                      result: wrapperText,
+                      isFileAttachment: false,
+                      fileName: '',
+                      skipAutoInsertCheck: true,
+                    },
+                  }),
+                );
+              });
+            } else {
+              throw new Error('Adapter insertText method returned false');
+            }
+          } catch (error) {
+            console.error('New adapter insertText method failed:', error);
+
+            // Fallback to legacy method if available
+            if (typeof adapter.insertTextIntoInput === 'function') {
+              console.log('Auto-insert: Falling back to legacy insertTextIntoInput method');
+
+              // Primary submit attempt: Keyboard simulation (Enter key)
+              setTimeout(async () => {
+                const inputElement = await findCurrentInputElement();
+                if (inputElement) {
+                  console.log('Primary auto-submit: Using keyboard simulation (Enter key) - legacy fallback');
+                  simulateEnterKey(inputElement);
+                } else {
+                  console.log('Primary auto-submit: Input element not found, falling back to button click - legacy fallback');
+                  await fallbackButtonSubmit(adapter);
+                }
+              }, 100);
+              
+              // Fallback: Force submit after 3 seconds if content is still in input
+              setTimeout(async () => {
+                const inputElement = await findCurrentInputElement();
+                if (inputElement && inputElement.textContent && inputElement.textContent.includes('<function_result')) {
+                  console.log('Fallback: Forcing submission after timeout (legacy fallback)');
+                  simulateEnterKey(inputElement);
+                }
+              }, 3000);
+
+              // Efficient event dispatch with requestAnimationFrame
+              requestAnimationFrame(() => {
+                document.dispatchEvent(
+                  new CustomEvent('mcp:tool-execution-complete', {
+                    detail: {
+                      result: wrapperText,
+                      isFileAttachment: false,
+                      fileName: '',
+                      skipAutoInsertCheck: true,
+                    },
+                  }),
+                );
+              });
+            } else {
+              console.error('No valid insert method found on adapter for auto-insert');
+            }
+          }
+        } else if (typeof adapter.insertTextIntoInput === 'function') {
+          // Legacy method fallback
+          console.log('Auto-insert: Using legacy insertTextIntoInput method');
+
+          // Primary submit attempt: Keyboard simulation (Enter key)
+          setTimeout(async () => {
+            const inputElement = await findCurrentInputElement();
+            if (inputElement) {
+              console.log('Primary auto-submit: Using keyboard simulation (Enter key) - legacy method');
+              simulateEnterKey(inputElement);
+            } else {
+              console.log('Primary auto-submit: Input element not found, falling back to button click - legacy method');
+              await fallbackButtonSubmit(adapter);
+            }
+          }, 100);
+          
+          // Fallback: Force submit after 3 seconds if content is still in input
+          setTimeout(async () => {
+            const inputElement = await findCurrentInputElement();
+            if (inputElement && inputElement.textContent && inputElement.textContent.includes('<function_result')) {
+              console.log('Fallback: Forcing submission after timeout (legacy method)');
+              simulateEnterKey(inputElement);
+            }
+          }, 3000);
+
+          // Efficient event dispatch with requestAnimationFrame
+          requestAnimationFrame(() => {
+            document.dispatchEvent(
+              new CustomEvent('mcp:tool-execution-complete', {
+                detail: {
+                  result: wrapperText,
+                  isFileAttachment: false,
+                  fileName: '',
+                  skipAutoInsertCheck: true,
+                },
+              }),
+            );
+          });
+        } else {
+          console.error('Adapter has no insert method available for auto-insert');
+        }
+      }
+    };
+
+    // Execute auto-insert immediately
+    autoInsertResult();
 
     // Create button container efficiently using DocumentFragment
     const fragment = document.createDocumentFragment();
@@ -1213,7 +1591,7 @@ export const displayResult = (
         if (typeof adapter.insertText === 'function') {
           try {
             const success = await adapter.insertText(wrapperText);
-            
+
             if (success) {
               // Optimized success state handling
               insertButton.textContent = 'Inserted!';
@@ -1244,11 +1622,11 @@ export const displayResult = (
             }
           } catch (error) {
             console.error('New adapter insertText method failed:', error);
-            
+
             // Fallback to legacy method if available
             if (typeof adapter.insertTextIntoInput === 'function') {
               console.log('Falling back to legacy insertTextIntoInput method');
-              
+
               // Efficient event dispatch with requestAnimationFrame
               requestAnimationFrame(() => {
                 document.dispatchEvent(
@@ -1288,7 +1666,7 @@ export const displayResult = (
         } else if (typeof adapter.insertTextIntoInput === 'function') {
           // Legacy method fallback
           console.log('Using legacy insertTextIntoInput method');
-          
+
           // Efficient event dispatch with requestAnimationFrame
           requestAnimationFrame(() => {
             document.dispatchEvent(
@@ -1372,7 +1750,8 @@ export const displayResult = (
     // Handle auto-attachment for large results
     if (
       rawResultText.length > MAX_INSERT_LENGTH &&
-      adapter && adapterSupportsCapability('file-attachment') &&
+      adapter &&
+      adapterSupportsCapability('file-attachment') &&
       WEBSITE_NAME_FOR_MAX_INSERT_LENGTH_CHECK.includes(websiteName)
     ) {
       console.debug(`Auto-attaching file: Result length (${rawResultText.length}) exceeds ${MAX_INSERT_LENGTH}`);

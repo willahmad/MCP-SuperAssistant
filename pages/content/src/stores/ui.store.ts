@@ -27,7 +27,7 @@ export interface UIState {
   closeModal: () => void;
   setGlobalLoading: (loading: boolean) => void;
   setTheme: (theme: GlobalSettings['theme']) => void;
-  setMCPEnabled: (enabled: boolean, reason?: string) => void; // Action to control MCP state
+  setMCPEnabled: (enabled: boolean, reason?: string, showSidebar?: boolean) => void; // Action to control MCP state
 }
 
 const initialSidebarState: SidebarState = {
@@ -158,15 +158,16 @@ export const useUIStore = create<UIState>()(
           }
         },
 
-        setMCPEnabled: (enabled: boolean, reason?: string) => {
+        setMCPEnabled: (enabled: boolean, reason?: string, showSidebar?: boolean) => {
+          if (showSidebar === undefined) showSidebar = false; // Default to false - don't auto-show sidebar
           const previousState = get().mcpEnabled;
           set({ mcpEnabled: enabled });
           
           console.log(`[UIStore] MCP toggle set to ${enabled}. Reason: ${reason || 'user action'}`);
           
-          // When MCP is enabled, show sidebar; when disabled, hide sidebar
-          if (enabled !== previousState) {
-            get().setSidebarVisibility(enabled, reason || 'mcp-toggle');
+          // Only show/hide sidebar if explicitly requested
+          if (enabled !== previousState && showSidebar !== undefined) {
+            get().setSidebarVisibility(showSidebar, reason || 'mcp-toggle');
           }
           
           // Emit event for components that need to react to MCP state changes

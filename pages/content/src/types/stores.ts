@@ -55,7 +55,7 @@ export interface SidebarState {
 
 export interface UserPreferences {
   autoSubmit: boolean;
-  autoInsert: boolean;  // New automation field
+  autoInsert: boolean; // New automation field
   autoExecute: boolean; // New automation field
   notifications: boolean;
   theme: 'light' | 'dark' | 'system';

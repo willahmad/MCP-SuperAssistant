@@ -1,4 +1,12 @@
-import type { DetectedTool, ToolExecution, ConnectionStatus, UserPreferences, Notification, GlobalSettings, Tool } from '../types/stores';
+import type {
+  DetectedTool,
+  ToolExecution,
+  ConnectionStatus,
+  UserPreferences,
+  Notification,
+  GlobalSettings,
+  Tool,
+} from '../types/stores';
 import type { AdapterConfig } from '../plugins/plugin-types'; // Added for plugin:config-updated
 
 export interface EventMap {
@@ -59,7 +67,14 @@ export interface EventMap {
   // Error events
   'error:unhandled': { error: Error; context?: string | Record<string, any> };
   'error:recovery-attempted': { error: string | Error; strategy: string };
-  'error:circuit-breaker-opened': { operation: string; state: string; error: Error; failureCount: number; nextAttemptTime: number; stats: any };
+  'error:circuit-breaker-opened': {
+    operation: string;
+    state: string;
+    error: Error;
+    failureCount: number;
+    nextAttemptTime: number;
+    stats: any;
+  };
   'error:circuit-breaker-closed': { operation: string; state: string; stats: any };
   'error:circuit-breaker-blocked': { operation: string; state: string; nextAttemptTime: number; error: Error };
   'error:circuit-breaker-half-open': { operation: string; state: string };
@@ -79,7 +94,7 @@ export interface EventMap {
   'error:pattern-detected': { pattern: string; count: number; error: Error; context: any };
   'component:reset': { component?: string };
   'app:fallback-mode': { reason: string };
-  
+
   // Test event (example from migration guide)
   'test:event': Record<string, never> | object | undefined;
 }

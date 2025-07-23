@@ -1,15 +1,15 @@
 /**
  * Automation Service for MCP SuperAssistant
- * 
+ *
  * This service handles the automation features (auto insert, auto submit, auto execute)
  * that were previously part of the legacy adapter system. It integrates with the new
  * Zustand architecture and plugin-based adapter system.
- * 
+ *
  * Features:
  * - Auto Insert: Automatically insert function execution results into the current page
  * - Auto Submit: Automatically submit forms after auto-insertion
  * - Auto Execute: Log when tool execution is completed (extensible for future features)
- * 
+ *
  * The service listens for 'mcp:tool-execution-complete' events and performs actions
  * based on the current automation state from the user preferences store.
  */
@@ -19,7 +19,7 @@ import { useCurrentAdapter } from '../hooks/useAdapter';
 import { eventBus } from '../events/event-bus';
 
 // Store references for accessing state outside React components
-let storeRefs: {
+const storeRefs: {
   getUserPreferences: (() => Promise<any>) | null;
   getCurrentAdapterState: (() => Promise<any>) | null;
 } = {
@@ -42,18 +42,16 @@ async function initializeStoreAccess() {
       const { useAdapterStore } = await import('../stores/adapter.store');
       const adapterState = useAdapterStore.getState();
       const activeAdapterRegistration = adapterState.getActiveAdapter();
-      
+
       const plugin = activeAdapterRegistration?.plugin;
-      
+
       return {
         plugin,
         // Bind methods to maintain proper 'this' context
         insertText: plugin?.insertText ? plugin.insertText.bind(plugin) : null,
         attachFile: plugin?.attachFile ? plugin.attachFile.bind(plugin) : null,
         submitForm: plugin?.submitForm ? plugin.submitForm.bind(plugin) : null,
-        isReady: !!plugin && 
-                activeAdapterRegistration.status === 'active' && 
-                !adapterState.lastAdapterError
+        isReady: !!plugin && activeAdapterRegistration.status === 'active' && !adapterState.lastAdapterError,
       };
     };
 
@@ -89,6 +87,13 @@ export class AutomationService {
   private static instance: AutomationService | null = null;
   private isInitialized = false;
   private eventListener: ((event: Event) => void) | null = null;
+  
+  // Conditional cooldown mechanism to prevent feedback loops while allowing legitimate sequential invocations
+  private lastToolExecutionTime: number = 0;
+  private lastSubmissionTime: number = 0;
+  private readonly COOLDOWN_PERIOD_MS = 1000; // Reduced to 1 second cooldown
+  private readonly MAX_RAPID_SUBMISSIONS = 3; // Max submissions within cooldown period
+  private rapidSubmissionCount: number = 0;
 
   // Private constructor for singleton pattern
   private constructor() {}
@@ -194,10 +199,14 @@ export class AutomationService {
     const detail = event.detail;
     console.debug('[AutomationService] Tool execution complete event received:', detail);
 
+    // Track the tool execution time for cooldown mechanism
+    this.lastToolExecutionTime = Date.now();
+    console.debug('[AutomationService] Updated last tool execution time:', this.lastToolExecutionTime);
+
     try {
       // Get current automation state from user preferences
       const automationState = await this.getAutomationState();
-      
+
       if (!automationState) {
         console.debug('[AutomationService] Could not get automation state, skipping automation');
         return;
@@ -216,10 +225,10 @@ export class AutomationService {
       // Handle Auto Insert and Auto Submit logic
       // Skip auto-insert if skipAutoInsertCheck is true (for manual actions)
       const shouldAutoInsert = automationState.autoInsert && !detail.skipAutoInsertCheck;
-      
+
       if (shouldAutoInsert) {
         const insertSuccess = await this.handleAutoInsert(detail);
-        
+
         // Only proceed with auto submit if auto insert was successful
         // and auto submit is enabled
         if (insertSuccess && automationState.autoSubmit) {
@@ -228,7 +237,6 @@ export class AutomationService {
       } else {
         console.debug('[AutomationService] Auto Insert disabled, skipping insert and submit actions');
       }
-
     } catch (error) {
       console.error('[AutomationService] Error handling tool execution complete:', error);
     }
@@ -246,7 +254,7 @@ export class AutomationService {
       }
 
       const preferences = await storeRefs.getUserPreferences();
-      
+
       // Extract automation settings from preferences
       return {
         autoInsert: preferences.autoInsert || false,
@@ -269,7 +277,7 @@ export class AutomationService {
       callId: detail.callId,
       hasResult: !!detail.result,
       isFileAttachment: detail.isFileAttachment,
-      fileName: detail.fileName
+      fileName: detail.fileName,
     });
 
     // Emit event for potential future integrations
@@ -311,13 +319,13 @@ export class AutomationService {
       // Handle file attachment
       if (detail.isFileAttachment && detail.file && attachFile) {
         console.debug('[AutomationService] Auto inserting file:', detail.file.name);
-        
+
         try {
           const success = await attachFile(detail.file);
-          
+
           if (success) {
             console.log('[AutomationService] File attached successfully via auto insert');
-            
+
             // Optionally insert confirmation text if provided
             if (detail.confirmationText && insertText) {
               console.debug('[AutomationService] Inserting file confirmation text');
@@ -330,7 +338,7 @@ export class AutomationService {
                 }
               }, 100);
             }
-            
+
             return true;
           } else {
             console.warn('[AutomationService] File attachment failed');
@@ -342,19 +350,19 @@ export class AutomationService {
             hasAttachFile: !!attachFile,
             attachFileType: typeof attachFile,
             activePluginName: activePlugin?.name,
-            fileName: detail.file?.name
+            fileName: detail.file?.name,
           });
           return false;
         }
       }
-      
+
       // Handle text insertion
       else if (detail.result && insertText) {
         console.debug('[AutomationService] Auto inserting text result');
-        
+
         try {
           const success = await insertText(detail.result);
-          
+
           if (success) {
             console.log('[AutomationService] Text inserted successfully via auto insert');
             return true;
@@ -367,12 +375,12 @@ export class AutomationService {
           console.error('[AutomationService] insertText context info:', {
             hasInsertText: !!insertText,
             insertTextType: typeof insertText,
-            activePluginName: activePlugin?.name
+            activePluginName: activePlugin?.name,
           });
           return false;
         }
       }
-      
+
       // No valid insertion method found
       else {
         console.warn('[AutomationService] No valid insertion method found for auto insert', {
@@ -380,15 +388,45 @@ export class AutomationService {
           isFileAttachment: detail.isFileAttachment,
           hasFile: !!detail.file,
           hasInsertText: !!insertText,
-          hasAttachFile: !!attachFile
+          hasAttachFile: !!attachFile,
         });
         return false;
       }
-
     } catch (error) {
       console.error('[AutomationService] Error during auto insert:', error);
       return false;
     }
+  }
+
+  /**
+   * Check if the tool execution has legitimate content that should bypass cooldown
+   * This helps distinguish between legitimate tool invocations and potential feedback loops
+   */
+  private hasLegitimateToolContent(detail: ToolExecutionCompleteDetail): boolean {
+    // Check if we have a function result with actual content
+    if (detail.result && detail.result.trim().length > 0) {
+      // Check if it contains function result markers (indicating a real tool execution)
+      if (detail.result.includes('<function_result') || 
+          detail.result.includes('function_result') ||
+          detail.result.includes('Weather for') || // Common tool result patterns
+          detail.result.includes('Temperature:') ||
+          detail.result.includes('Result:') ||
+          detail.result.includes('Data:')) {
+        return true;
+      }
+    }
+    
+    // Check if it's a file attachment (always legitimate)
+    if (detail.isFileAttachment && detail.file) {
+      return true;
+    }
+    
+    // Check if we have a confirmation text (indicates successful tool execution)
+    if (detail.confirmationText && detail.confirmationText.trim().length > 0) {
+      return true;
+    }
+    
+    return false;
   }
 
   /**
@@ -397,6 +435,35 @@ export class AutomationService {
    */
   private async handleAutoSubmit(detail: ToolExecutionCompleteDetail): Promise<boolean> {
     console.debug('[AutomationService] Handling auto submit');
+
+    // Check conditional cooldown - only block if we're in a potential feedback loop
+    const currentTime = Date.now();
+    const timeSinceLastExecution = currentTime - this.lastToolExecutionTime;
+    const timeSinceLastSubmission = currentTime - this.lastSubmissionTime;
+    
+    // Check if this is a legitimate tool invocation (has function result content)
+    const hasLegitimateContent = this.hasLegitimateToolContent(detail);
+    
+    // Only apply cooldown if:
+    // 1. We're within the cooldown period AND
+    // 2. We've had too many rapid submissions OR
+    // 3. The content doesn't look like a legitimate tool result
+    const shouldBlockCooldown = timeSinceLastExecution < this.COOLDOWN_PERIOD_MS && 
+                               (this.rapidSubmissionCount >= this.MAX_RAPID_SUBMISSIONS || !hasLegitimateContent);
+    
+    if (shouldBlockCooldown) {
+      console.debug(`[AutomationService] Auto submit blocked by conditional cooldown. Time since last execution: ${timeSinceLastExecution}ms, rapid submissions: ${this.rapidSubmissionCount}, has legitimate content: ${hasLegitimateContent}`);
+      return false;
+    }
+
+    // Update rapid submission counter
+    if (timeSinceLastExecution < this.COOLDOWN_PERIOD_MS) {
+      this.rapidSubmissionCount++;
+    } else {
+      this.rapidSubmissionCount = 1; // Reset counter
+    }
+
+    console.debug(`[AutomationService] Conditional cooldown check passed. Time since last execution: ${timeSinceLastExecution}ms, rapid submissions: ${this.rapidSubmissionCount}`);
 
     try {
       // Get current adapter from the adapter hook
@@ -419,9 +486,10 @@ export class AutomationService {
 
       try {
         const success = await submitForm();
-        
+
         if (success) {
           console.log('[AutomationService] Form submitted successfully via auto submit');
+          this.lastSubmissionTime = Date.now(); // Track successful submission
           return true;
         } else {
           console.warn('[AutomationService] Form submission failed');
@@ -432,11 +500,10 @@ export class AutomationService {
         console.error('[AutomationService] submitForm context info:', {
           hasSubmitForm: !!submitForm,
           submitFormType: typeof submitForm,
-          activePluginName: activePlugin?.name
+          activePluginName: activePlugin?.name,
         });
         return false;
       }
-
     } catch (error) {
       console.error('[AutomationService] Error during auto submit:', error);
       return false;
@@ -514,14 +581,14 @@ if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
       return automationService.triggerTestAutomation({
         result: text,
         isFileAttachment: false,
-        skipAutoInsertCheck: false
+        skipAutoInsertCheck: false,
       });
     },
     testAutoSubmit: async () => {
       return automationService.triggerTestAutomation({
         result: 'Test result for auto submit',
         isFileAttachment: false,
-        skipAutoInsertCheck: true // Force insert so submit can run
+        skipAutoInsertCheck: true, // Force insert so submit can run
       });
     },
     testFileAttachment: async (fileName: string = 'test.txt', content: string = 'Test file content') => {
@@ -531,10 +598,10 @@ if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
         file,
         fileName,
         confirmationText: `File ${fileName} attached successfully`,
-        skipAutoInsertCheck: false
+        skipAutoInsertCheck: false,
       });
-    }
+    },
   };
-  
+
   console.debug('[AutomationService] Debug utilities exposed on window.__automationService');
 }

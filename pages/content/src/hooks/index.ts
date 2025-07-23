@@ -28,7 +28,7 @@ export {
   useAppError,
   useUILoading,
   useUIError,
-  useAllStoreStates
+  useAllStoreStates,
 } from './useStores';
 
 // Event hooks
@@ -38,7 +38,7 @@ export {
   useEventOnce,
   useEventSync,
   useConditionalEventListener,
-  useMultipleEventListeners
+  useMultipleEventListeners,
 } from './useEventBus';
 
 // Adapter hooks
@@ -47,24 +47,17 @@ export {
   useAdapterManagement,
   useAdapterCapabilities,
   useAdapterStatus as useAdapterStatusMonitoring,
-  useAutoAdapterSwitching
+  useAutoAdapterSwitching,
 } from './useAdapter';
 
 // Adapter bridge hooks for compatibility
-export {
-  useSiteAdapterBridge,
-  useCompatibleSiteAdapter
-} from './useAdapterBridge';
+export { useSiteAdapterBridge, useCompatibleSiteAdapter } from './useAdapterBridge';
 
 // Utility hooks (re-export existing ones)
 export { useShadowDomStyles } from './useShadowDomStyles';
 
 // Sidebar plugin hooks
-export {
-  useSidebarPlugin,
-  useSidebarPluginStatus,
-  useSidebarPluginManagement
-} from './useSidebarPlugin';
+export { useSidebarPlugin, useSidebarPluginStatus, useSidebarPluginManagement } from './useSidebarPlugin';
 
 // TODO: Add these hooks when implemented
 // export { usePerformanceMonitor } from './usePerformance';

@@ -42,7 +42,7 @@ class TypedEventBus {
             try {
               this.emit('error:unhandled', {
                 error: error as Error,
-                context: `event-listener-${String(event)}`
+                context: `event-listener-${String(event)}`,
               });
             } finally {
               this.isEmittingErrorEvent = false;
@@ -68,7 +68,7 @@ class TypedEventBus {
             try {
               this.emit('error:unhandled', {
                 error: error as Error,
-                context: `once-event-listener-${String(event)}`
+                context: `once-event-listener-${String(event)}`,
               });
             } finally {
               this.isEmittingErrorEvent = false;
@@ -92,7 +92,7 @@ class TypedEventBus {
           try {
             this.emit('error:unhandled', {
               error: error as Error,
-              context: `wildcard-event-listener`
+              context: `wildcard-event-listener`,
             });
           } finally {
             this.isEmittingErrorEvent = false;
@@ -107,10 +107,7 @@ class TypedEventBus {
     }
   }
 
-  on<K extends keyof EventMap>(
-    event: K,
-    callback: TypedEventCallback<K>
-  ): UnsubscribeFunction {
+  on<K extends keyof EventMap>(event: K, callback: TypedEventCallback<K>): UnsubscribeFunction {
     if (!this.listeners.has(event)) {
       this.listeners.set(event, new Set());
     }
@@ -119,17 +116,14 @@ class TypedEventBus {
     if (eventListenersSet.size >= this.maxListeners) {
       console.warn(
         `[EventBus] Max listeners (${this.maxListeners}) reached for event "${String(event)}". ` +
-        `This might indicate a memory leak.`
+          `This might indicate a memory leak.`,
       );
     }
     eventListenersSet.add(callback as TypedEventCallback<any>);
     return () => this.off(event, callback);
   }
 
-  once<K extends keyof EventMap>(
-    event: K,
-    callback: TypedEventCallback<K>
-  ): UnsubscribeFunction {
+  once<K extends keyof EventMap>(event: K, callback: TypedEventCallback<K>): UnsubscribeFunction {
     if (!this.onceListeners.has(event)) {
       this.onceListeners.set(event, new Set());
     }
@@ -138,11 +132,11 @@ class TypedEventBus {
     if (eventListenersSet.size >= this.maxListeners) {
       console.warn(
         `[EventBus] Max listeners (${this.maxListeners}) reached for event (once) "${String(event)}". ` +
-        `This might indicate a memory leak.`
+          `This might indicate a memory leak.`,
       );
     }
     eventListenersSet.add(callback as TypedEventCallback<any>);
-    
+
     // Return a function that specifically removes this 'once' listener
     return () => {
       const currentOnceListeners = this.onceListeners.get(event);
@@ -155,10 +149,7 @@ class TypedEventBus {
     };
   }
 
-  off<K extends keyof EventMap>(
-    event: K,
-    callback: TypedEventCallback<K>
-  ): void {
+  off<K extends keyof EventMap>(event: K, callback: TypedEventCallback<K>): void {
     const regularListeners = this.listeners.get(event);
     if (regularListeners) {
       regularListeners.delete(callback as TypedEventCallback<any>);
@@ -191,7 +182,7 @@ class TypedEventBus {
     const once = this.onceListeners.get(event)?.size || 0;
     return regular + once;
   }
-  
+
   setMaxListeners(count: number): void {
     if (count > 0) {
       this.maxListeners = count;
@@ -247,9 +238,10 @@ class TypedEventBus {
       wildcardListenerCount: this.wildcardListeners.size,
       eventHistorySize: this.eventHistory.length,
       maxHistorySize: this.maxHistorySize,
-      totalListenerRegistrations: Array.from(this.listeners.values()).reduce((sum, set) => sum + set.size, 0) +
-                                Array.from(this.onceListeners.values()).reduce((sum, set) => sum + set.size, 0) +
-                                this.wildcardListeners.size
+      totalListenerRegistrations:
+        Array.from(this.listeners.values()).reduce((sum, set) => sum + set.size, 0) +
+        Array.from(this.onceListeners.values()).reduce((sum, set) => sum + set.size, 0) +
+        this.wildcardListeners.size,
     };
   }
 }
