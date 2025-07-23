@@ -1,4 +1,4 @@
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import { LoggingMessageNotificationSchema } from '@modelcontextprotocol/sdk/types.js';
 
@@ -74,7 +74,7 @@ export class WebSocketPlugin implements ITransportPlugin {
       transport.on('close', (event: any) => {
         console.log(`[WebSocketPlugin] Transport closed: ${event.code} ${event.reason}`);
         this.isConnectedFlag = false;
-        
+
         // Notify the main client about disconnection
         this.handleDisconnection('WebSocket closed', event.code, event.reason);
       });
@@ -272,7 +272,7 @@ export class WebSocketPlugin implements ITransportPlugin {
    */
   private handleDisconnection(reason: string, code?: number, details?: string): void {
     console.log(`[WebSocketPlugin] Handling disconnection: ${reason} (code: ${code}, details: ${details})`);
-    
+
     if (this.disconnectionCallback) {
       try {
         this.disconnectionCallback(reason, code, details);

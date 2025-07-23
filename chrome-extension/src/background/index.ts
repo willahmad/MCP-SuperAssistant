@@ -36,7 +36,7 @@ import type {
 } from '../../../pages/content/src/types/messages';
 
 // Default MCP server URLs
-const DEFAULT_SSE_URL = 'http://localhost:3006/sse';
+const DEFAULT_SSE_URL = 'http://localhost:8000/mcp';
 const DEFAULT_WEBSOCKET_URL = 'ws://localhost:3006/message';
 
 // Connection type management
@@ -150,6 +150,8 @@ function decrementConnectionCount(): void {
 let isConnecting = false;
 let connectionAttemptCount = 0;
 const MAX_CONNECTION_ATTEMPTS = 3;
+let lastConnectionAttempt = 0;
+const MIN_CONNECTION_INTERVAL = 10000; // 10 seconds minimum between connection attempts
 
 /**
  * Enhanced error categorization for better tool vs connection error distinction
@@ -293,13 +295,24 @@ async function initializeExtension() {
  * @returns Promise that resolves when connection attempt is complete (success or failure)
  */
 async function tryConnectToServer(uri: string, type: ConnectionType = connectionType): Promise<void> {
+  const now = Date.now();
+  
+  // Prevent rapid connection attempts
   if (isConnecting) {
     console.log('Connection attempt already in progress, skipping');
+    return;
+  }
+  
+  // Enforce minimum interval between connection attempts
+  if (now - lastConnectionAttempt < MIN_CONNECTION_INTERVAL) {
+    const remainingTime = MIN_CONNECTION_INTERVAL - (now - lastConnectionAttempt);
+    console.log(`Connection attempt too soon, waiting ${Math.ceil(remainingTime / 1000)} seconds...`);
     return;
   }
 
   isConnecting = true;
   connectionAttemptCount++;
+  lastConnectionAttempt = now;
 
   console.log(
     `Attempting to connect to MCP server via ${type} (attempt ${connectionAttemptCount}/${MAX_CONNECTION_ATTEMPTS}): ${uri}`,
@@ -343,7 +356,7 @@ async function tryConnectToServer(uri: string, type: ConnectionType = connection
 
     // Schedule another attempt if we haven't reached the limit
     if (connectionAttemptCount < MAX_CONNECTION_ATTEMPTS) {
-      const delayMs = Math.min(5000 * connectionAttemptCount, 15000); // Exponential backoff with cap
+      const delayMs = Math.max(MIN_CONNECTION_INTERVAL, Math.min(5000 * connectionAttemptCount, 15000)); // Exponential backoff with minimum interval
       console.log(`Scheduling next connection attempt in ${delayMs / 1000} seconds...`);
 
       setTimeout(() => {
@@ -362,62 +375,9 @@ async function tryConnectToServer(uri: string, type: ConnectionType = connection
   }
 }
 
-// Set up a periodic connection check with enhanced recovery logic
-const PERIODIC_CHECK_INTERVAL = 60000; // 1 minute
-setInterval(async () => {
-  if (isConnecting) {
-    return; // Skip if already connecting
-  }
-
-  // Check current connection status with enhanced validation
-  const wasConnected = getConnectionStatus();
-  const isConnected = await checkMcpServerConnection();
-  updateConnectionStatus(isConnected);
-
-  // Broadcast status change if it changed
-  if (wasConnected !== isConnected) {
-    console.log(`[Background] Connection status changed: ${wasConnected} -> ${isConnected}`);
-    broadcastConnectionStatusToContentScripts(isConnected);
-    
-    // If connected, also broadcast available tools
-    if (isConnected) {
-      try {
-        console.log('[Background] Periodic check: Connection established, fetching and broadcasting tools...');
-        const primitives = await getPrimitivesWithBackwardsCompatibility(getServerUrl(), true);
-        console.log(`[Background] Periodic check: Retrieved ${primitives.length} primitives`);
-        
-        const tools = normalizeTools(primitives);
-        console.log(`[Background] Periodic check: Broadcasting ${tools.length} normalized tools`);
-        
-        broadcastToolsUpdateToContentScripts(tools);
-      } catch (error) {
-        console.warn('[Background] Error broadcasting tools after status change:', error);
-      }
-    }
-  } else {
-    // Even if status didn't change, periodically broadcast to ensure content scripts are in sync
-    broadcastConnectionStatusToContentScripts(isConnected);
-  }
-
-  // ENHANCED: If not connected and we're not in the middle of connecting, try to connect
-  // Reset connection attempt count periodically to allow recovery from permanent failure state
-  if (!isConnected && !isConnecting) {
-    connectionAttemptCount = 0; // Reset counter for periodic checks
-    console.log('Periodic check: MCP server not connected, attempting to connect');
-    const serverUrl = getServerUrl();
-    
-    // Reset the client's failure state periodically to prevent permanent disconnection
-    // This is critical to fix the issue where only browser restart would work
-    try {
-      console.log('[Background] Resetting MCP client connection state for periodic recovery attempt');
-      resetMcpConnectionStateForRecovery(); // Use recovery reset instead of full reset
-    } catch (error) {
-      console.warn('[Background] Error resetting MCP connection state:', error);
-    }
-    
-    tryConnectToServer(serverUrl, connectionType).catch(() => {});
-  }
-}, PERIODIC_CHECK_INTERVAL);
+// NOTE: Removed periodic connection check and tool refresh to prevent excessive refreshing
+// Tools are now refreshed only on initial connection, bridge restoration, and user interactions
+// This eliminates unnecessary background polling and improves performance
 
 // Log active connections periodically
 setInterval(() => {
@@ -933,4 +893,21 @@ function broadcastConfigUpdateToContentScripts(config: { uri: string; type?: str
     });
   });
 }
+
+// Add handler for extension icon click to toggle sidebar
+chrome.action.onClicked.addListener(() => {
+  chrome.tabs.query({}, (tabs) => {
+    tabs.forEach(tab => {
+      if (tab.id) {
+        chrome.tabs.sendMessage(tab.id, {
+          type: 'mcp:toggle-sidebar',
+          origin: 'background',
+          timestamp: Date.now()
+        }).catch(() => {
+          // Ignore errors for tabs that can't receive messages
+        });
+      }
+    });
+  });
+});
 

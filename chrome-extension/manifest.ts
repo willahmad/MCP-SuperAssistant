@@ -54,10 +54,9 @@ const manifest = {
     service_worker: 'background.js',
     type: 'module',
   },
-  // action: {
-  //   default_popup: 'popup/index.html',
-  //   default_icon: 'icon-34.png',
-  // },
+  action: {
+    default_icon: 'icon-128.png',
+  },
   // chrome_url_overrides: {
   //   newtab: 'new-tab/index.html',
   // },

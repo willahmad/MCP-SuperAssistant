@@ -1,13 +1,13 @@
 // /**
 //  * LEGACY MCP Interface - DEPRECATED
-//  * 
-//  * This file contains legacy code that is being phased out in favor of the new 
+//  *
+//  * This file contains legacy code that is being phased out in favor of the new
 //  * ContextBridge-based communication system. It is kept for backward compatibility
 //  * and will be removed in a future version.
-//  * 
+//  *
 //  * The new communication flow is:
 //  * Content Script -> ContextBridge -> Background Script -> MCP Server
-//  * 
+//  *
 //  * Most functionality in this file has been disabled and replaced by the
 //  * background script's direct message handling.
 //  */
@@ -166,7 +166,7 @@
 
 //       // Check if we have recent primitives cache
 //       const hasFreshCache =
-//         this.toolDetailsCache.primitives.length > 0 && 
+//         this.toolDetailsCache.primitives.length > 0 &&
 //         now - this.toolDetailsCache.lastFetch < VERIFICATION_CACHE_TTL;
 
 //       if (hasFreshCache) {
@@ -179,7 +179,7 @@
 //       // Refresh cache
 //       console.log('[Legacy MCP Interface] Refreshing tool cache for verification');
 //       const primitives = await getPrimitivesWithSSE(this.serverUrl);
-      
+
 //       // Filter and store primitives
 //       const filteredPrimitives = primitives
 //         .filter((primitive: any) => primitive.type === 'tool')
@@ -239,8 +239,8 @@
 //       const CACHE_TTL = 30000; // 30 seconds
 
 //       // Use cache if available and not forcing refresh
-//       if (!forceRefresh && 
-//           this.toolDetailsCache.primitives.length > 0 && 
+//       if (!forceRefresh &&
+//           this.toolDetailsCache.primitives.length > 0 &&
 //           now - this.toolDetailsCache.lastFetch < CACHE_TTL) {
 //         console.log('[Legacy MCP Interface] Using cached primitives');
 //         return this.toolDetailsCache.primitives;
@@ -248,7 +248,7 @@
 
 //       console.log('[Legacy MCP Interface] Fetching fresh primitives');
 //       const primitives = await getPrimitivesWithSSE(this.serverUrl);
-      
+
 //       this.toolDetailsCache = {
 //         primitives,
 //         lastFetch: now

@@ -21,27 +21,22 @@ export { SSEPlugin, WebSocketPlugin, WebSocketTransport };
 export { DEFAULT_CLIENT_CONFIG };
 
 // Re-export types
-export type { 
-  ITransportPlugin, 
-  PluginMetadata, 
-  PluginConfig, 
-  TransportType 
-} from './types/plugin.js';
+export type { ITransportPlugin, PluginMetadata, PluginConfig, TransportType } from './types/plugin.js';
 
-export type { 
-  ClientConfig, 
-  ConnectionRequest, 
-  SSEPluginConfig, 
-  WebSocketPluginConfig, 
-  GlobalConfig 
+export type {
+  ClientConfig,
+  ConnectionRequest,
+  SSEPluginConfig,
+  WebSocketPluginConfig,
+  GlobalConfig,
 } from './types/config.js';
 
-export type { 
-  Primitive, 
-  NormalizedTool, 
-  PrimitivesResponse, 
-  ToolCallRequest, 
-  ToolCallResult 
+export type {
+  Primitive,
+  NormalizedTool,
+  PrimitivesResponse,
+  ToolCallRequest,
+  ToolCallResult,
 } from './types/primitives.js';
 
 export type { AllEvents } from './types/events.js';
@@ -57,7 +52,7 @@ async function getGlobalClient(): Promise<McpClient> {
     try {
       globalClient = new McpClient();
       await globalClient.initialize();
-      
+
       // Set up global event listeners for connection status changes
       setupGlobalClientEventListeners(globalClient);
     } catch (error) {
@@ -76,37 +71,41 @@ async function getGlobalClient(): Promise<McpClient> {
  */
 function setupGlobalClientEventListeners(client: McpClient): void {
   // Listen for connection status changes and forward them to any registered listeners
-  client.on('connection:status-changed', (event) => {
+  client.on('connection:status-changed', event => {
     console.log('[Global Client] Connection status changed:', event);
-    
+
     // Emit a global event that can be caught by the background script
     if (typeof window !== 'undefined' && window.dispatchEvent) {
-      window.dispatchEvent(new CustomEvent('mcp:connection-status-changed', { 
-        detail: event 
-      }));
+      window.dispatchEvent(
+        new CustomEvent('mcp:connection-status-changed', {
+          detail: event,
+        }),
+      );
     }
-    
+
     // Also try to broadcast via chrome runtime if available
     if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage) {
-      chrome.runtime.sendMessage({
-        type: 'mcp:connection-status-changed',
-        payload: event,
-        origin: 'mcpclient'
-      }).catch(() => {
-        // Ignore errors if background script isn't listening
-      });
+      chrome.runtime
+        .sendMessage({
+          type: 'mcp:connection-status-changed',
+          payload: event,
+          origin: 'mcpclient',
+        })
+        .catch(() => {
+          // Ignore errors if background script isn't listening
+        });
     }
   });
 
-  client.on('client:connected', (event) => {
+  client.on('client:connected', event => {
     console.log('[Global Client] Client connected:', event);
   });
 
-  client.on('client:disconnected', (event) => {
+  client.on('client:disconnected', event => {
     console.log('[Global Client] Client disconnected:', event);
   });
 
-  client.on('client:error', (event) => {
+  client.on('client:error', event => {
     console.error('[Global Client] Client error:', event);
   });
 }
@@ -157,68 +156,70 @@ export async function checkMcpServerConnection(): Promise<boolean> {
 export async function callToolWithBackwardsCompatibility(
   uri: string,
   toolName: string,
-  args: { [key: string]: unknown }
+  args: { [key: string]: unknown },
 ): Promise<any> {
   const client = await getGlobalClient();
   const transportType = detectTransportType(uri);
-  
+
   if (!client.isConnected()) {
     await client.connect({ uri, type: transportType });
   }
-  
+
   return await client.callTool(toolName, args);
 }
 
 export async function getPrimitivesWithBackwardsCompatibility(
   uri: string,
-  forceRefresh: boolean = false
+  forceRefresh: boolean = false,
 ): Promise<any[]> {
   const client = await getGlobalClient();
   const transportType = detectTransportType(uri);
-  
+
   if (!client.isConnected()) {
     await client.connect({ uri, type: transportType });
   }
-  
+
   const response = await client.getPrimitives(forceRefresh);
-  
+
   // Convert back to old format
   const primitives: any[] = [];
-  
+
   response.tools.forEach(tool => {
     primitives.push({ type: 'tool', value: tool });
   });
-  
+
   response.resources.forEach(resource => {
     primitives.push({ type: 'resource', value: resource });
   });
-  
+
   response.prompts.forEach(prompt => {
     primitives.push({ type: 'prompt', value: prompt });
   });
-  
+
   return primitives;
 }
 
 export async function forceReconnectToMcpServer(uri: string): Promise<void> {
   const client = await getGlobalClient();
   const transportType = detectTransportType(uri);
-  
+
   if (client.isConnected()) {
     await client.disconnect();
   }
-  
+
   await client.connect({ uri, type: transportType });
 }
 
 export async function runWithBackwardsCompatibility(uri: string): Promise<void> {
   const client = await getGlobalClient();
   const transportType = detectTransportType(uri);
-  
+
   await client.connect({ uri, type: transportType });
-  
+
   const response = await client.getPrimitives();
-  console.log(`Connected, found ${response.tools.length} tools, ${response.resources.length} resources, ${response.prompts.length} prompts`);
+  console.log(
+    `Connected, found ${response.tools.length} tools, ${response.resources.length} resources, ${response.prompts.length} prompts`,
+  );
 }
 
 export function resetMcpConnectionState(): void {
@@ -247,7 +248,10 @@ export const getPrimitivesWithSSE = getPrimitivesWithBackwardsCompatibility;
 export const runWithSSE = runWithBackwardsCompatibility;
 
 // WebSocket-specific functions
-export async function connectWithWebSocket(uri: string, config?: Partial<import('./types/config.js').ClientConfig>): Promise<McpClient> {
+export async function connectWithWebSocket(
+  uri: string,
+  config?: Partial<import('./types/config.js').ClientConfig>,
+): Promise<McpClient> {
   const client = new McpClient(config);
   await client.initialize();
   await client.connect({ uri, type: 'websocket' });
@@ -257,27 +261,24 @@ export async function connectWithWebSocket(uri: string, config?: Partial<import(
 export async function callToolWithWebSocket(
   uri: string,
   toolName: string,
-  args: { [key: string]: unknown }
+  args: { [key: string]: unknown },
 ): Promise<any> {
   const client = await getGlobalClient();
   await client.connect({ uri, type: 'websocket' });
   return await client.callTool(toolName, args);
 }
 
-export async function getPrimitivesWithWebSocket(
-  uri: string,
-  forceRefresh: boolean = false
-): Promise<any[]> {
+export async function getPrimitivesWithWebSocket(uri: string, forceRefresh: boolean = false): Promise<any[]> {
   const client = await getGlobalClient();
   await client.connect({ uri, type: 'websocket' });
-  
+
   const response = await client.getPrimitives(forceRefresh);
-  
+
   const primitives: any[] = [];
   response.tools.forEach(tool => primitives.push({ type: 'tool', value: tool }));
   response.resources.forEach(resource => primitives.push({ type: 'resource', value: resource }));
   response.prompts.forEach(prompt => primitives.push({ type: 'prompt', value: prompt }));
-  
+
   return primitives;
 }
 
@@ -291,10 +292,13 @@ export function normalizeToolsFromPrimitives(primitives: any[]): any[] {
         name: tool.name,
         description: tool.description || '',
         input_schema: tool.inputSchema || tool.input_schema || {},
-        schema: tool.inputSchema ? JSON.stringify(tool.inputSchema) : 
-                tool.input_schema ? JSON.stringify(tool.input_schema) : '{}',
+        schema: tool.inputSchema
+          ? JSON.stringify(tool.inputSchema)
+          : tool.input_schema
+            ? JSON.stringify(tool.input_schema)
+            : '{}',
         ...(tool.uri && { uri: tool.uri }),
-        ...(tool.arguments && { arguments: tool.arguments })
+        ...(tool.arguments && { arguments: tool.arguments }),
       };
     });
 }
