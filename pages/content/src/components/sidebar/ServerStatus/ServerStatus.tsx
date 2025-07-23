@@ -19,7 +19,7 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
     status: connectionStatus,
     isConnected,
     isReconnecting: storeIsReconnecting,
-    error: connectionError
+    error: connectionError,
   } = useConnectionStatus();
 
   const { config: serverConfig, setConfig: setServerConfig } = useServerConfig();
@@ -49,7 +49,9 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
 
   // Debug logging to track status changes
   useEffect(() => {
-    console.log(`[ServerStatus] Status update - connectionStatus: ${connectionStatus}, initialStatus: ${initialStatus}, final: ${status}, isConnected: ${isConnected}`);
+    console.log(
+      `[ServerStatus] Status update - connectionStatus: ${connectionStatus}, initialStatus: ${initialStatus}, final: ${status}, isConnected: ${isConnected}`,
+    );
   }, [connectionStatus, initialStatus, status, isConnected]);
 
   // Destructure with fallbacks in case useBackgroundCommunication fails
@@ -85,21 +87,18 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
     [communicationMethods],
   );
 
-  const getServerConfig = useCallback(
-    async () => {
-      try {
-        if (!communicationMethods.getServerConfig) {
-          throw new Error('Communication method unavailable');
-        }
-        return await communicationMethods.getServerConfig();
-      } catch (error) {
-        logMessage(`[ServerStatus] Get server config error: ${error instanceof Error ? error.message : String(error)}`);
-        setHasBackgroundError(true);
-        throw error; // Don't fallback to default, let caller handle the error
+  const getServerConfig = useCallback(async () => {
+    try {
+      if (!communicationMethods.getServerConfig) {
+        throw new Error('Communication method unavailable');
       }
-    },
-    [communicationMethods],
-  );
+      return await communicationMethods.getServerConfig();
+    } catch (error) {
+      logMessage(`[ServerStatus] Get server config error: ${error instanceof Error ? error.message : String(error)}`);
+      setHasBackgroundError(true);
+      throw error; // Don't fallback to default, let caller handle the error
+    }
+  }, [communicationMethods]);
 
   const updateServerConfig = useCallback(
     async (config: { uri: string; connectionType: ConnectionType }) => {
@@ -165,7 +164,7 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
     const unsubscribeCallbacks: (() => void)[] = [];
 
     // Listen for connection status changes from the event bus
-    const unsubscribeConnection = eventBus.on('connection:status-changed', (data) => {
+    const unsubscribeConnection = eventBus.on('connection:status-changed', data => {
       logMessage(`[ServerStatus] Connection status event: ${data.status}${data.error ? ` (${data.error})` : ''}`);
 
       // Update local error state if there's an error
@@ -185,7 +184,7 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
     unsubscribeCallbacks.push(unsubscribeConnection);
 
     // Listen for context bridge events
-    const unsubscribeBridgeInvalidated = eventBus.on('context:bridge-invalidated', (data) => {
+    const unsubscribeBridgeInvalidated = eventBus.on('context:bridge-invalidated', data => {
       logMessage(`[ServerStatus] Context bridge invalidated: ${data.error}`);
       setHasBackgroundError(true);
       setStatusMessage(`Extension context invalidated: ${data.error}`);
@@ -200,11 +199,19 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
     unsubscribeCallbacks.push(unsubscribeBridgeRestored);
 
     // Listen for heartbeat events to monitor connection health
-    const unsubscribeHeartbeat = eventBus.on('connection:heartbeat', (data) => {
+    const unsubscribeHeartbeat = eventBus.on('connection:heartbeat', data => {
       // Update connection health indicator if needed
       logMessage(`[ServerStatus] Heartbeat received: ${data.timestamp}`);
     });
     unsubscribeCallbacks.push(unsubscribeHeartbeat);
+
+    // Listen for custom event to open server settings panel
+    const handleOpenSettings = () => {
+      logMessage('[ServerStatus] Received mcp:open-server-settings event, opening settings panel');
+      setShowSettings(true);
+    };
+    window.addEventListener('mcp:open-server-settings', handleOpenSettings);
+    unsubscribeCallbacks.push(() => window.removeEventListener('mcp:open-server-settings', handleOpenSettings));
 
     // Cleanup all event listeners
     return () => {
@@ -344,15 +351,9 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
       // Set appropriate status message based on reconnection result
       if (success) {
         setStatusMessage('Successfully reconnected to MCP server');
-        logMessage('[ServerStatus] Reconnection successful, fetching fresh tool list');
-        try {
-          const tools = await refreshTools(true);
-          logMessage(`[ServerStatus] Successfully fetched ${tools.length} tools after reconnection`);
-        } catch (refreshError) {
-          logMessage(
-            `[ServerStatus] Error fetching tools after reconnection: ${refreshError instanceof Error ? refreshError.message : String(refreshError)}`,
-          );
-        }
+        logMessage('[ServerStatus] Reconnection successful');
+        // NOTE: Removed automatic tool refresh after reconnection to prevent excessive refreshing
+        // Tools will be refreshed by the background script's 60-second interval
       } else {
         setStatusMessage('Failed to reconnect to MCP server. Some features will be limited.');
       }
@@ -476,15 +477,8 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
       if (success) {
         setStatusMessage('Successfully connected to MCP server');
 
-        // Refresh tools silently without UI updates
-        try {
-          const tools = await refreshTools(true);
-          logMessage(`[ServerStatus] Successfully refreshed ${tools.length} tools after server change`);
-        } catch (refreshError) {
-          logMessage(
-            `[ServerStatus] Error refreshing tools: ${refreshError instanceof Error ? refreshError.message : String(refreshError)}`,
-          );
-        }
+        // NOTE: Removed automatic tool refresh after server change to prevent excessive refreshing
+        // Tools will be refreshed by the background script's 60-second interval
       } else {
         setStatusMessage('Failed to connect to new MCP server');
       }
@@ -720,7 +714,7 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
               <Typography variant="h4" className="mb-3 text-slate-800 dark:text-slate-100 font-semibold">
                 Server Configuration
               </Typography>
-              
+
               <div className="mb-4">
                 <label htmlFor="connection-type" className="block mb-2 text-slate-600 dark:text-slate-400 font-medium">
                   Connection Type
@@ -728,15 +722,14 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
                 <select
                   id="connection-type"
                   value={connectionType}
-                  onChange={(e) => setConnectionType(e.target.value as ConnectionType)}
-                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white dark:bg-slate-800 dark:border-slate-600 dark:text-slate-200 focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-600 focus:border-transparent outline-none transition-all duration-200 hover:border-slate-400 dark:hover:border-slate-500"
-                >
+                  onChange={e => setConnectionType(e.target.value as ConnectionType)}
+                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white dark:bg-slate-800 dark:border-slate-600 dark:text-slate-200 focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-600 focus:border-transparent outline-none transition-all duration-200 hover:border-slate-400 dark:hover:border-slate-500">
                   <option value="sse">Server-Sent Events (SSE)</option>
                   <option value="websocket">WebSocket</option>
                 </select>
                 <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                  {connectionType === 'sse' 
-                    ? 'HTTP-based streaming connection (traditional)' 
+                  {connectionType === 'sse'
+                    ? 'HTTP-based streaming connection (traditional)'
                     : 'Full-duplex WebSocket connection (faster, more features)'}
                 </p>
               </div>
@@ -752,9 +745,11 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
                   onChange={handleServerUriChange}
                   onFocus={handleServerUriFocus}
                   onBlur={handleServerUriBlur}
-                  placeholder={connectionType === 'sse' 
-                    ? "Enter SSE URI (e.g., http://localhost:3000/sse)" 
-                    : "Enter WebSocket URI (e.g., ws://localhost:3000)"}
+                  placeholder={
+                    connectionType === 'sse'
+                      ? 'Enter SSE URI (e.g., http://localhost:3000/sse)'
+                      : 'Enter WebSocket URI (e.g., ws://localhost:3000)'
+                  }
                   className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white dark:bg-slate-800 dark:border-slate-600 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-600 focus:border-transparent outline-none transition-all duration-200 hover:border-slate-400 dark:hover:border-slate-500"
                 />
               </div>
@@ -833,12 +828,13 @@ const ServerStatus: React.FC<ServerStatusProps> = ({ status: initialStatus }) =>
 
                 <div className="flex justify-between items-center py-1">
                   <span className="font-medium text-slate-700 dark:text-slate-200">Connection Type:</span>
-                  <span className={cn(
-                    'px-2 py-1 rounded-full text-xs font-medium',
-                    connectionType === 'websocket' 
-                      ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400'
-                      : 'bg-gray-100 text-gray-700 dark:bg-gray-900/20 dark:text-gray-400',
-                  )}>
+                  <span
+                    className={cn(
+                      'px-2 py-1 rounded-full text-xs font-medium',
+                      connectionType === 'websocket'
+                        ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400'
+                        : 'bg-gray-100 text-gray-700 dark:bg-gray-900/20 dark:text-gray-400',
+                    )}>
                     {connectionType === 'websocket' ? 'WebSocket' : 'SSE'}
                   </span>
                 </div>
