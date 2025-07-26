@@ -158,7 +158,7 @@ async function initializeApplicationState(): Promise<void> {
     logger.warn('Application state already initialized, skipping.');
     return;
   }
-  
+
   logger.log('Initializing application state...');
 
   await performanceMonitor.time('app-state-initialization', async () => {
@@ -173,12 +173,9 @@ async function initializeApplicationState(): Promise<void> {
       const hostname = window.location.hostname;
       const site = window.location.href;
 
-      // Import plugin registry first and set initial activation flag
-      const { pluginRegistry } = await import('../plugins/plugin-registry');
-      
       // Set the flag before any operations that might trigger events
       pluginRegistry.setInitialActivationFlag(true);
-      
+
       try {
         // Update app store with current site (this will emit 'app:site-changed')
         useAppStore.getState().setCurrentSite({ site, host: hostname });
@@ -213,7 +210,7 @@ async function initializeApplicationState(): Promise<void> {
       }, 'initial-connection');
     }
   });
-  
+
   isApplicationStateInitialized = true;
   logger.log('Application state initialization completed.');
 }

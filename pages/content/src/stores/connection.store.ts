@@ -31,7 +31,18 @@ const defaultServerConfig: ServerConfig = {
   retryDelay: 2000, // ms
 };
 
-const initialState: Omit<ConnectionState, 'setStatus' | 'setServerConfig' | 'setLastError' | 'incrementAttempts' | 'resetAttempts' | 'setConnected' | 'setDisconnected' | 'startReconnecting' | 'stopReconnecting'> = {
+const initialState: Omit<
+  ConnectionState,
+  | 'setStatus'
+  | 'setServerConfig'
+  | 'setLastError'
+  | 'incrementAttempts'
+  | 'resetAttempts'
+  | 'setConnected'
+  | 'setDisconnected'
+  | 'startReconnecting'
+  | 'stopReconnecting'
+> = {
   status: 'disconnected',
   serverConfig: defaultServerConfig,
   lastConnectedAt: null,
@@ -53,8 +64,8 @@ export const useConnectionStore = create<ConnectionState>()(
       },
 
       setServerConfig: (config: Partial<ServerConfig>) => {
-        set(state => ({ 
-          serverConfig: { ...state.serverConfig, ...config }
+        set(state => ({
+          serverConfig: { ...state.serverConfig, ...config },
         }));
         console.log('[ConnectionStore] Server config updated:', get().serverConfig);
       },
@@ -78,7 +89,7 @@ export const useConnectionStore = create<ConnectionState>()(
         set({ connectionAttempts: 0 });
         console.log('[ConnectionStore] Connection attempts reset.');
       },
-      
+
       setConnected: (timestamp: number) => {
         set({
           status: 'connected',
@@ -117,8 +128,8 @@ export const useConnectionStore = create<ConnectionState>()(
         }
       },
     }),
-    { name: 'ConnectionStore', store: 'connection' } // For Redux DevTools extension
-  )
+    { name: 'ConnectionStore', store: 'connection' }, // For Redux DevTools extension
+  ),
 );
 
 // Example of how this store might be used by a connection manager service

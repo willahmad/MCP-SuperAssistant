@@ -14,6 +14,21 @@ import { useConnectionStore } from './stores/connection.store';
 
 // Import the new initialization system
 import { applicationInit, applicationCleanup, initializationUtils } from './core/main-initializer';
+import { pluginRegistry } from './plugins/plugin-registry';
+
+// Force import of adapters to prevent tree-shaking
+import { GrokAdapter } from './plugins/adapters/grok.adapter';
+import { GeminiAdapter } from './plugins/adapters/gemini.adapter';
+import { ChatGPTAdapter } from './plugins/adapters/chatgpt.adapter';
+
+// Force side effects to prevent tree-shaking
+const _forceAdapterInclusion = {
+  grok: GrokAdapter,
+  gemini: GeminiAdapter,
+  chatgpt: ChatGPTAdapter,
+};
+
+console.log('Forcing adapter inclusion in main entry:', Object.keys(_forceAdapterInclusion));
 
 // Import the render script functions
 import {
@@ -25,11 +40,12 @@ import {
   configureFunctionCallRenderer,
 } from '@src/render_prescript/src/index';
 
-// Import the adapter registry (legacy)
-import { adapterRegistry, getCurrentAdapter } from '@src/adapters/adapterRegistry';
+// import { adapterRegistry, getCurrentAdapter } from '@src/adapters/adapterRegistry';
 
 // Import the automation service
 import { initializeAllServices, cleanupAllServices } from './services';
+
+import { useMCPState, useToolEnablement } from './hooks';
 
 // Add this as a global recovery mechanism for the sidebar
 function setupSidebarRecovery(): void {
@@ -291,36 +307,37 @@ function collectDemographicData(): { [key: string]: any } {
 })();
 
 // Initialize the current site adapter regardless of MCP connection status
-(function initializeCurrentAdapter() {
-  try {
-    const currentHostname = window.location.hostname;
-    const adapter = adapterRegistry.getAdapter(currentHostname);
+// Legacy adapter initialization disabled - using new plugin system instead
+// (function initializeCurrentAdapter() {
+//   try {
+//     const currentHostname = window.location.hostname;
+//     const adapter = adapterRegistry.getAdapter(currentHostname);
 
-    if (adapter) {
-      const adapterId = adapter.name;
+//     if (adapter) {
+//       const adapterId = adapter.name;
 
-      if (!initializedAdapters.has(adapterId)) {
-        logMessage(`Initializing site adapter for ${adapter.name} (regardless of MCP connection)`);
+//       if (!initializedAdapters.has(adapterId)) {
+//         logMessage(`Initializing site adapter for ${adapter.name} (regardless of MCP connection)`);
 
-        // Always initialize the adapter to ensure UI is visible
-        adapter.initialize();
+//         // Always initialize the adapter to ensure UI is visible
+//         adapter.initialize();
 
-        // Mark this adapter as initialized
-        initializedAdapters.add(adapterId);
+//         // Mark this adapter as initialized
+//         initializedAdapters.add(adapterId);
 
-        // Set the adapter globally
-        window.mcpAdapter = adapter;
-        logMessage(`Exposed adapter ${adapter.name} to global window.mcpAdapter`);
-      } else {
-        logMessage(`Adapter ${adapter.name} already initialized, skipping initialization`);
-      }
-    } else {
-      logMessage('No adapter found for current hostname, cannot initialize');
-    }
-  } catch (error) {
-    console.error('Error initializing current adapter:', error);
-  }
-})();
+//         // Set the adapter globally
+//         window.mcpAdapter = adapter;
+//         logMessage(`Exposed adapter ${adapter.name} to global window.mcpAdapter`);
+//       } else {
+//         logMessage(`Adapter ${adapter.name} already initialized, skipping initialization`);
+//       }
+//     } else {
+//       logMessage('No adapter found for current hostname, cannot initialize');
+//     }
+//   } catch (error) {
+//     console.error('Error initializing current adapter:', error);
+//   }
+// })();
 
 // Initialize the new application architecture (Session 10)
 (async function initializeNewArchitecture() {
@@ -353,7 +370,6 @@ function collectDemographicData(): { [key: string]: any } {
 
     // Expose plugin registry globally for adapter access
     try {
-      const { pluginRegistry } = await import('./plugins/plugin-registry');
       (window as any).pluginRegistry = pluginRegistry;
       logMessage('Plugin registry exposed on window.pluginRegistry');
     } catch (pluginError) {
@@ -386,11 +402,14 @@ eventBus.on('connection:status-changed', ({ status }: { status: ConnectionStatus
   const isConnected = status === 'connected';
   logMessage(`[Content Script] MCP connection status changed: ${isConnected ? 'Connected' : 'Disconnected'}`);
 
-  const currentHostname = window.location.hostname;
-  const adapter = adapterRegistry.getAdapter(currentHostname);
-  if (adapter) {
-    adapter.updateConnectionStatus(isConnected);
-    (window as any).mcpAdapter = adapter;
+  // Use new plugin system instead of legacy adapter registry
+  const activePlugin = pluginRegistry.getActivePlugin();
+  if (activePlugin) {
+    // Update connection status on the active plugin if it has the method
+    if ('updateConnectionStatus' in activePlugin && typeof (activePlugin as any).updateConnectionStatus === 'function') {
+      (activePlugin as any).updateConnectionStatus(isConnected);
+    }
+    (window as any).mcpAdapter = activePlugin;
   }
 });
 
@@ -447,103 +466,167 @@ if (document.readyState === 'loading') {
 // Listen for messages from the background script
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   logMessage(`Message received in content script: ${JSON.stringify(message)}`); // Log all incoming messages
-  const currentHostname = window.location.hostname;
-  const adapter = adapterRegistry.getAdapter(currentHostname);
+  
+  // Use new plugin system instead of legacy adapter registry
+  const activePlugin = pluginRegistry.getActivePlugin();
+  const adapter = activePlugin; // Use the active plugin as the adapter
 
   if (message.command === 'getStats') {
-    sendResponse({
-      success: true,
-      stats: {
-        mcpConnected: useConnectionStore.getState().status === 'connected',
-        activeSite: adapter?.name || 'Unknown',
-      },
-    });
-  } else if (message.command === 'toggleSidebar') {
-    // Use the site adapter to toggle sidebar
-    if (adapter) {
-      adapter.toggleSidebar();
-      sendResponse({ success: true });
-    } else {
-      sendResponse({ success: false, error: 'No active site adapter' });
-    }
-  } else if (message.command === 'showSidebarWithToolOutputs') {
-    // Show the sidebar with tool outputs
-    if (adapter) {
-      adapter.showSidebarWithToolOutputs();
-      sendResponse({ success: true });
-    } else {
-      sendResponse({ success: false, error: 'No active site adapter' });
-    }
-  } else if (message.command === 'callMcpTool') {
-    // Handle MCP tool call requests from popup
-    const { toolName, args } = message;
-    if (toolName && args) {
-      mcpClient
-        .callTool(toolName, args)
-        .then(result => {
-          sendResponse({ success: true, result });
-        })
-        .catch(err => {
-          const errorMsg = err instanceof Error ? err.message : String(err);
-          sendResponse({ success: false, error: errorMsg });
-        });
-      return true; // Indicate we'll respond asynchronously
-    } else {
-      sendResponse({ success: false, error: 'Invalid tool call request' });
-    }
-  } else if (message.command === 'refreshSidebarContent') {
-    // Refresh the sidebar content
-    if (adapter) {
-      adapter.refreshSidebarContent();
-      sendResponse({ success: true });
-    } else {
-      sendResponse({ success: false, error: 'No active site adapter' });
-    }
-  } else if (message.command === 'setFunctionCallRendering') {
-    // Handle toggling function call rendering
-    const { enabled } = message;
-    if (rendererInitialized) {
-      if (enabled) {
-        logMessage('Starting function call monitoring.');
-        startDirectMonitoring();
-        // Run a check immediately after enabling
+      sendResponse({
+        success: true,
+        stats: {
+          mcpConnected: useConnectionStore.getState().status === 'connected',
+          activeSite: adapter?.name || 'Unknown',
+        },
+      });
+    } else if (message.command === 'toggleSidebar') {
+      // Use the site adapter to toggle sidebar
+      if (adapter && 'toggleSidebar' in adapter && typeof (adapter as any).toggleSidebar === 'function') {
+        (adapter as any).toggleSidebar();
+        sendResponse({ success: true });
+      } else {
+        sendResponse({ success: false, error: 'No active site adapter or toggleSidebar not available' });
+      }
+    } else if (message.command === 'showSidebarWithToolOutputs') {
+      // Show the sidebar with tool outputs
+      if (adapter && 'showSidebarWithToolOutputs' in adapter && typeof (adapter as any).showSidebarWithToolOutputs === 'function') {
+        (adapter as any).showSidebarWithToolOutputs();
+        sendResponse({ success: true });
+      } else {
+        sendResponse({ success: false, error: 'No active site adapter or showSidebarWithToolOutputs not available' });
+      }
+    } else if (message.command === 'callMcpTool') {
+      // Handle MCP tool call requests from popup
+      const { toolName, args } = message;
+      if (toolName && args) {
+        mcpClient
+          .callTool(toolName, args)
+          .then(result => {
+            sendResponse({ success: true, result });
+          })
+          .catch(err => {
+            const errorMsg = err instanceof Error ? err.message : String(err);
+            sendResponse({ success: false, error: errorMsg });
+          });
+        return true; // Indicate we'll respond asynchronously
+      } else {
+        sendResponse({ success: false, error: 'Invalid tool call request' });
+      }
+    } else if (message.command === 'refreshSidebarContent') {
+      // Refresh the sidebar content
+      if (adapter && 'refreshSidebarContent' in adapter && typeof (adapter as any).refreshSidebarContent === 'function') {
+        (adapter as any).refreshSidebarContent();
+        sendResponse({ success: true });
+      } else {
+        sendResponse({ success: false, error: 'No active site adapter or refreshSidebarContent not available' });
+      }
+    } else if (message.command === 'setFunctionCallRendering') {
+      // Handle toggling function call rendering
+      const { enabled } = message;
+      if (rendererInitialized) {
+        if (enabled) {
+          logMessage('Starting function call monitoring.');
+          startDirectMonitoring();
+          // Run a check immediately after enabling
+          renderFunctionCalls();
+          checkForUnprocessedFunctionCalls();
+        } else {
+          logMessage('Stopping function call monitoring.');
+          stopDirectMonitoring();
+        }
+        sendResponse({ success: true });
+      } else {
+        logMessage('Cannot toggle function call rendering: Renderer not initialized.');
+        sendResponse({ success: false, error: 'Renderer not initialized' });
+      }
+    } else if (message.command === 'forceRenderFunctionCalls') {
+      // Force a re-render/check for function calls
+      if (rendererInitialized) {
+        logMessage('Forcing function call render check.');
         renderFunctionCalls();
         checkForUnprocessedFunctionCalls();
+        sendResponse({ success: true });
       } else {
-        logMessage('Stopping function call monitoring.');
-        stopDirectMonitoring();
+        logMessage('Cannot force render: Renderer not initialized.');
+        sendResponse({ success: false, error: 'Renderer not initialized' });
       }
-      sendResponse({ success: true });
-    } else {
-      logMessage('Cannot toggle function call rendering: Renderer not initialized.');
-      sendResponse({ success: false, error: 'Renderer not initialized' });
+    } else if (message.command === 'configureRenderer') {
+      // Configure the renderer
+      if (rendererInitialized) {
+        logMessage(`Configuring function call renderer with options: ${JSON.stringify(message.options)}`);
+        configureFunctionCallRenderer(message.options);
+        sendResponse({ success: true });
+      } else {
+        logMessage('Cannot configure renderer: Not initialized.');
+        sendResponse({ success: false, error: 'Renderer not initialized' });
+      }
+    } else if (message && message.type === 'mcp:toggle-sidebar') {
+      // Toggle the sidebar state (show if hidden, hide if shown)
+      try {
+        // Use the UI store's setMCPEnabled if available
+        const uiStore = require('./stores/ui.store');
+        if (uiStore && uiStore.useUIStore) {
+          const currentState = uiStore.useUIStore.getState().mcpEnabled;
+          uiStore.useUIStore.getState().setMCPEnabled(!currentState, 'chrome-action-icon');
+          sendResponse && sendResponse({ success: true, toggled: !currentState });
+          return true;
+        }
+      } catch (e) {
+        // Fallback: try window.mcpAdapter or window.activeSidebarManager
+        if (window.mcpAdapter && typeof window.mcpAdapter.setMCPEnabled === 'function') {
+          // Try to get current state and toggle it
+          const currentState = window.mcpAdapter.isMCPEnabled ? window.mcpAdapter.isMCPEnabled() : true;
+          window.mcpAdapter.setMCPEnabled(!currentState);
+          sendResponse && sendResponse({ success: true, toggled: !currentState });
+          return true;
+        } else if (window.activeSidebarManager && typeof window.activeSidebarManager.show === 'function') {
+          // Check if sidebar is currently visible and toggle accordingly
+          const shadowHost = window.activeSidebarManager.getShadowHost();
+          const isVisible = shadowHost && 
+            shadowHost.style.display !== 'none' && 
+            window.getComputedStyle(shadowHost).display !== 'none';
+          
+          if (isVisible) {
+            window.activeSidebarManager.hide();
+          } else {
+            window.activeSidebarManager.show();
+          }
+          sendResponse && sendResponse({ success: true, toggled: !isVisible });
+          return true;
+        }
+      }
+      sendResponse && sendResponse({ success: false, error: 'No sidebar toggle method found' });
+      return true;
+    } else if (message && message.type === 'mcp:activate-sidebar') {
+      // Use the same logic as the MCP button: enable MCP (show sidebar)
+      try {
+        // Use the UI store's setMCPEnabled if available
+        const uiStore = require('./stores/ui.store');
+        if (uiStore && uiStore.useUIStore) {
+          uiStore.useUIStore.getState().setMCPEnabled(true, 'chrome-action-icon');
+          sendResponse && sendResponse({ success: true });
+          return true;
+        }
+      } catch (e) {
+        // Fallback: try window.mcpAdapter or window.activeSidebarManager
+        if (window.mcpAdapter && typeof window.mcpAdapter.setMCPEnabled === 'function') {
+          window.mcpAdapter.setMCPEnabled(true);
+          sendResponse && sendResponse({ success: true });
+          return true;
+        } else if (window.activeSidebarManager && typeof window.activeSidebarManager.show === 'function') {
+          window.activeSidebarManager.show();
+          sendResponse && sendResponse({ success: true });
+          return true;
+        }
+      }
+      sendResponse && sendResponse({ success: false, error: 'No sidebar activation method found' });
+      return true;
     }
-  } else if (message.command === 'forceRenderFunctionCalls') {
-    // Force a re-render/check for function calls
-    if (rendererInitialized) {
-      logMessage('Forcing function call render check.');
-      renderFunctionCalls();
-      checkForUnprocessedFunctionCalls();
-      sendResponse({ success: true });
-    } else {
-      logMessage('Cannot force render: Renderer not initialized.');
-      sendResponse({ success: false, error: 'Renderer not initialized' });
-    }
-  } else if (message.command === 'configureRenderer') {
-    // Configure the renderer
-    if (rendererInitialized) {
-      logMessage(`Configuring function call renderer with options: ${JSON.stringify(message.options)}`);
-      configureFunctionCallRenderer(message.options);
-      sendResponse({ success: true });
-    } else {
-      logMessage('Cannot configure renderer: Not initialized.');
-      sendResponse({ success: false, error: 'Renderer not initialized' });
-    }
-  }
 
-  // Always return true if you want to use sendResponse asynchronously
-  return true;
-});
+    // Always return true if you want to use sendResponse asynchronously
+    return true;
+  }
+);
 
 // Handle page unload to clean up resources (Session 10)
 window.addEventListener('beforeunload', async () => {
@@ -557,11 +640,11 @@ window.addEventListener('beforeunload', async () => {
     await applicationCleanup();
     
     // Legacy adapter cleanup for compatibility
-    const currentHostname = window.location.hostname;
-    const adapter = adapterRegistry.getAdapter(currentHostname);
-    if (adapter) {
-      adapter.cleanup();
-    }
+    // const currentHostname = window.location.hostname;
+    // const adapter = adapterRegistry.getAdapter(currentHostname);
+    // if (adapter) {
+    //   adapter.cleanup();
+    // }
 
     // Clear the initialized adapters set
     initializedAdapters.clear();
@@ -577,8 +660,27 @@ window.addEventListener('beforeunload', async () => {
 console.debug('[Content Script] mcpClient exposed to window object for renderer use.');
 
 // Set the current adapter to global window object
-const currentAdapter = getCurrentAdapter();
-if (currentAdapter) {
-  window.mcpAdapter = currentAdapter;
-  console.debug(`[Content Script] Current adapter (${currentAdapter.name}) exposed to window object as mcpAdapter.`);
-}
+// const currentAdapter = getCurrentAdapter();
+// if (currentAdapter) {
+//   window.mcpAdapter = currentAdapter;
+//   console.debug(`[Content Script] Current adapter (${currentAdapter.name}) exposed to window object as mcpAdapter.`);
+// }
+
+// At the top level of the content script, ensure MCP is not enabled and all tools are deselected on startup
+(function ensureMcpDisabledAndToolsDeselectedOnStartup() {
+  try {
+    const { setMCPEnabled } = useMCPState();
+    const { disableAllTools } = useToolEnablement();
+    setMCPEnabled(false, 'startup');
+    disableAllTools();
+    // Optionally log for debugging
+    // console.log('[MCP] Disabled MCP and deselected all tools on startup');
+  } catch (e) {
+    // Silently ignore errors (e.g., if stores not initialized yet)
+  }
+})();
+
+// --- ENSURE PLUGIN SYSTEM IS ALWAYS INITIALIZED ---
+(async () => {
+  await applicationInit();
+})();

@@ -1,7 +1,7 @@
 import type React from 'react';
 import { useState, useEffect, useMemo } from 'react';
 import type { Tool } from '@src/types/mcp';
-import { useAvailableTools, useToolExecution, useToolEnablement } from '../../../hooks';
+import { useAvailableTools, useToolExecution, useToolEnablement, useMCPState, useNotifications } from '../../../hooks';
 import { logMessage } from '@src/utils/helpers';
 import { Typography, Icon, Button } from '../ui';
 import { cn } from '@src/lib/utils';
@@ -13,17 +13,20 @@ interface AvailableToolsProps {
   onExecute: (tool: Tool) => void;
   onRefresh: () => void;
   isRefreshing: boolean;
+  defaultExpanded?: boolean; // Add this prop
 }
 
-const AvailableTools: React.FC<AvailableToolsProps> = ({ tools, onExecute, onRefresh, isRefreshing }) => {
+const AvailableTools: React.FC<AvailableToolsProps> = ({ tools, onExecute, onRefresh, isRefreshing, defaultExpanded = false }) => {
   // Use Zustand hooks for tool management
   const { tools: storeTools } = useAvailableTools();
   const { executions, isExecuting } = useToolExecution();
   const { enabledTools, enableTool, disableTool, enableAllTools, disableAllTools, isToolEnabled, loadToolEnablementState, isLoadingEnablement } = useToolEnablement();
+  const { setMCPEnabled, mcpEnabled } = useMCPState();
+  const { addNotification } = useNotifications();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedTools, setExpandedTools] = useState<Set<string>>(new Set());
-  const [isExpanded, setIsExpanded] = useState(true);
+  const [isExpanded, setIsExpanded] = useState(defaultExpanded); // Use prop for initial state
   const [isLoaded, setIsLoaded] = useState(false);
   const [pendingChanges, setPendingChanges] = useState<Set<string>>(new Set());
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
@@ -56,6 +59,11 @@ const AvailableTools: React.FC<AvailableToolsProps> = ({ tools, onExecute, onRef
       loadToolEnablementState();
     }
   }, [effectiveTools.length, loadToolEnablementState]);
+
+  // If defaultExpanded changes (e.g., sidebar opens), update state
+  useEffect(() => {
+    setIsExpanded(defaultExpanded);
+  }, [defaultExpanded]);
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setSearchTerm(e.target.value);
@@ -110,6 +118,10 @@ const AvailableTools: React.FC<AvailableToolsProps> = ({ tools, onExecute, onRef
   const handleRefresh = () => {
     logMessage('[AvailableTools] Refreshing available tools');
     onRefresh();
+    // Show toast if MCP is enabled
+    if (mcpEnabled) {
+      addNotification({ type: 'info', title: 'MCP tools updated', message: 'The list of MCP tools has been refreshed in your chat context.' });
+    }
   };
 
   const handleToggleTool = (toolName: string) => {
@@ -137,6 +149,10 @@ const AvailableTools: React.FC<AvailableToolsProps> = ({ tools, onExecute, onRef
     setHasUnsavedChanges(false);
     setPendingChanges(new Set());
     logMessage('[AvailableTools] Tool changes saved and sorted');
+    // If all tools are disabled after saving, also disable MCP
+    if (enabledTools.size === 0) {
+      setMCPEnabled(false, 'all-tools-disabled');
+    }
   };
 
   const handleDiscardChanges = () => {

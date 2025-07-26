@@ -238,81 +238,60 @@ export abstract class BaseSidebarManager {
       const styleEl = document.createElement('style');
       styleEl.id = 'mcp-sidebar-push-styles';
       styleEl.textContent = `
-        /* High-priority push mode styles with !important to override website styles */
         html.push-mode-enabled {
           overflow-x: hidden !important;
-          transition: margin-right 0.4s cubic-bezier(0.25, 0.8, 0.25, 1) !important, 
-                      width 0.4s cubic-bezier(0.25, 0.8, 0.25, 1) !important,
-                      transform 0.4s cubic-bezier(0.25, 0.8, 0.25, 1) !important;
+          transition: margin-right 0.6s cubic-bezier(0.25, 0.8, 0.25, 1) !important, 
+                      width 0.6s cubic-bezier(0.25, 0.8, 0.25, 1) !important,
+                      transform 0.6s cubic-bezier(0.25, 0.8, 0.25, 1) !important;
           box-sizing: border-box !important;
         }
-        
-        /* Force position and dimensions for push mode */
         html.push-mode-enabled {
           position: relative !important;
         }
-        
-        /* Alternative transform-based push mode for websites that override margin/width */
         html.push-mode-enabled.push-mode-transform {
           transform: translateX(calc(var(--sidebar-width-mcp, 320px) * -1)) !important;
           width: 100vw !important;
           margin-right: 0 !important;
         }
-        
-        /* Ensure body also respects the new layout */
         html.push-mode-enabled body {
           margin-right: 0 !important;
           padding-right: 0 !important;
           overflow-x: hidden !important;
           box-sizing: border-box !important;
         }
-        
-        /* Ensure fixed elements don't overlap with sidebar */
         html.push-mode-enabled .sidebar {
           right: 0;
         }
-
-        /* Add smooth resize styles */
         .sidebar {
-          transition: width 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+          transition: width 0.6s cubic-bezier(0.25, 0.8, 0.25, 1);
         }
-        
         .sidebar.resizing {
           transition: none !important;
         }
-        
-        /* Enhanced shadow host animations */
         #mcp-sidebar-shadow-host {
           opacity: 0;
-          transform: translateX(30px) scale(0.95);
-          transition: opacity 0.4s cubic-bezier(0.25, 0.8, 0.25, 1),
-                      transform 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+          transform: translateX(40px) scale(0.95);
+          transition: opacity 0.6s cubic-bezier(0.25, 0.8, 0.25, 1),
+                      transform 0.6s cubic-bezier(0.25, 0.8, 0.25, 1);
         }
-        
         #mcp-sidebar-shadow-host.initialized {
           opacity: 1;
           transform: translateX(0) scale(1);
         }
-        
         #mcp-sidebar-shadow-host.showing {
           transition-duration: 0s;
         }
-        
         #mcp-sidebar-shadow-host.hiding {
           opacity: 0;
           transform: translateX(20px) scale(0.98);
           transition: opacity 0.3s cubic-bezier(0.55, 0.085, 0.68, 0.53),
                       transform 0.3s cubic-bezier(0.55, 0.085, 0.68, 0.53);
         }
-        
-        /* Add subtle backdrop effect */
         body:has(#mcp-sidebar-shadow-host.initialized) {
           transition: filter 0.3s ease;
         }
-        
-        /* Smooth page content adjustments */
         body {
-          transition: transform 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+          transition: transform 0.6s cubic-bezier(0.25, 0.8, 0.25, 1);
         }
       `;
       document.head.appendChild(styleEl);
@@ -480,10 +459,11 @@ export abstract class BaseSidebarManager {
       // Start with immediate visibility but with opacity 0 for smooth transition
       this.shadowHost.style.display = 'block';
       this.shadowHost.style.opacity = '0';
-      this.shadowHost.style.transform = 'translateX(30px) scale(0.95)';
-
-      // Add showing class for CSS animations
+      this.shadowHost.style.transform = 'translateX(40px) scale(0.95)';
       this.shadowHost.classList.add('showing');
+
+      // Render content first, then animate in
+      this.render();
 
       // Force browser reflow
       void this.shadowHost.offsetHeight;
@@ -492,7 +472,7 @@ export abstract class BaseSidebarManager {
       requestAnimationFrame(() => {
         if (this.shadowHost) {
           this.shadowHost.style.transition =
-            'opacity 0.4s cubic-bezier(0.25, 0.8, 0.25, 1), transform 0.4s cubic-bezier(0.25, 0.8, 0.25, 1)';
+            'opacity 0.6s cubic-bezier(0.25, 0.8, 0.25, 1), transform 0.6s cubic-bezier(0.25, 0.8, 0.25, 1)';
           this.shadowHost.style.opacity = '1';
           this.shadowHost.style.transform = 'translateX(0) scale(1)';
 
@@ -502,15 +482,11 @@ export abstract class BaseSidebarManager {
               this.shadowHost.classList.add('initialized');
               this.shadowHost.classList.remove('showing');
             }
-          }, 100);
+          }, 200);
         }
       });
 
-      // Render content after a brief delay for smoother experience
-      setTimeout(() => {
-        this.render();
-        logMessage('Sidebar shown with enhanced animations');
-      }, 50);
+      logMessage('Sidebar shown with enhanced entrance animation');
     }
   }
 

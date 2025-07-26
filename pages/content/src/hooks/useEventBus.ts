@@ -7,7 +7,7 @@ import type { EventMap, EventCallback } from '../events/event-types';
 export function useEventListener<K extends keyof EventMap>(
   event: K,
   callback: EventCallback<EventMap[K]>,
-  deps: React.DependencyList = []
+  deps: React.DependencyList = [],
 ) {
   const callbackRef = useRef(callback);
 
@@ -46,7 +46,7 @@ export function useEventEmitter() {
 export function useEventOnce<K extends keyof EventMap>(
   event: K,
   callback: EventCallback<EventMap[K]>,
-  deps: React.DependencyList = []
+  deps: React.DependencyList = [],
 ) {
   const callbackRef = useRef(callback);
   const hasTriggered = useRef(false);
@@ -62,7 +62,7 @@ export function useEventOnce<K extends keyof EventMap>(
     const wrappedCallback = (data: EventMap[K]) => {
       if (hasTriggered.current) return;
       hasTriggered.current = true;
-      
+
       try {
         callbackRef.current(data);
       } catch (error) {
@@ -80,11 +80,11 @@ export function useEventOnce<K extends keyof EventMap>(
 export function useEventSync<T, K extends keyof EventMap>(
   event: K,
   initialValue: T,
-  extractor: (eventData: EventMap[K]) => T
+  extractor: (eventData: EventMap[K]) => T,
 ): T {
   const [value, setValue] = useState<T>(initialValue);
 
-  useEventListener(event, (data) => {
+  useEventListener(event, data => {
     try {
       const newValue = extractor(data);
       setValue(newValue);
@@ -101,7 +101,7 @@ export function useConditionalEventListener<K extends keyof EventMap>(
   event: K,
   callback: EventCallback<EventMap[K]>,
   condition: boolean,
-  deps: React.DependencyList = []
+  deps: React.DependencyList = [],
 ) {
   const callbackRef = useRef(callback);
 
@@ -129,7 +129,7 @@ export function useConditionalEventListener<K extends keyof EventMap>(
 // Hook for multiple event listening
 export function useMultipleEventListeners(
   eventCallbacks: Partial<{ [K in keyof EventMap]: EventCallback<EventMap[K]> }>,
-  deps: React.DependencyList = []
+  deps: React.DependencyList = [],
 ) {
   const eventCallbacksRef = useRef(eventCallbacks);
 
@@ -144,8 +144,9 @@ export function useMultipleEventListeners(
       if (callback) {
         const eventName = event as keyof EventMap;
         const typedCallback = callback as EventCallback<EventMap[keyof EventMap]>; // General type for safety
-        
-        const wrappedCallback = (data: any) => { // data is 'any' due to generic callback
+
+        const wrappedCallback = (data: any) => {
+          // data is 'any' due to generic callback
           try {
             typedCallback(data);
           } catch (error) {
@@ -159,6 +160,5 @@ export function useMultipleEventListeners(
     return () => {
       unsubscribers.forEach(unsubscribe => unsubscribe());
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deps]); // Rerun if deps change, which includes the eventCallbacks map itself
 }

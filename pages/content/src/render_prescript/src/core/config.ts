@@ -157,7 +157,7 @@ export const WEBSITE_CONFIGS: Array<{
     config: {
       targetSelectors: ['pre'],
       streamingContainerSelectors: ['pre'],
-      function_result_selector: ['.UserMessage-module__container--cAvvK','.ChatMessage-module__userMessage--xvIFp'],
+      function_result_selector: ['.UserMessage-module__container--cAvvK', '.ChatMessage-module__userMessage--xvIFp'],
     },
   },
   // Add more website-specific configurations as needed

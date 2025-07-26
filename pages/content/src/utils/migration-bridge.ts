@@ -1,6 +1,6 @@
 /**
  * Migration Bridge Utility
- * 
+ *
  * This utility helps bridge the gap between the old adapter system and the new plugin architecture.
  * It provides compatibility functions and migration helpers.
  */
@@ -44,48 +44,54 @@ export class LegacyAdapterBridge {
       },
       toggleSidebar: () => {
         // Toggle sidebar through direct plugin call to avoid circular events
-        import('../plugins/plugin-registry').then(({ pluginRegistry }) => {
-          const sidebarPlugin = pluginRegistry.getPluginByName('sidebar-plugin') as any;
-          if (sidebarPlugin && sidebarPlugin.getStatus() === 'active') {
-            sidebarPlugin.toggleSidebar();
-          }
-        }).catch(error => {
-          console.warn('[MigrationBridge] Failed to import plugin registry:', error);
-        });
+        import('../plugins/plugin-registry')
+          .then(({ pluginRegistry }) => {
+            const sidebarPlugin = pluginRegistry.getPluginByName('sidebar-plugin') as any;
+            if (sidebarPlugin && sidebarPlugin.getStatus() === 'active') {
+              sidebarPlugin.toggleSidebar();
+            }
+          })
+          .catch(error => {
+            console.warn('[MigrationBridge] Failed to import plugin registry:', error);
+          });
       },
       showSidebarWithToolOutputs: () => {
         // Show sidebar through direct plugin call to avoid circular events
-        import('../plugins/plugin-registry').then(({ pluginRegistry }) => {
-          const sidebarPlugin = pluginRegistry.getPluginByName('sidebar-plugin') as any;
-          if (sidebarPlugin) {
-            if (sidebarPlugin.getStatus() === 'active') {
-              // Plugin is active, show sidebar directly
-              sidebarPlugin.showSidebar().catch((error: any) => {
-                console.warn('[MigrationBridge] Failed to show sidebar:', error);
-              });
+        import('../plugins/plugin-registry')
+          .then(({ pluginRegistry }) => {
+            const sidebarPlugin = pluginRegistry.getPluginByName('sidebar-plugin') as any;
+            if (sidebarPlugin) {
+              if (sidebarPlugin.getStatus() === 'active') {
+                // Plugin is active, show sidebar directly
+                sidebarPlugin.showSidebar().catch((error: any) => {
+                  console.warn('[MigrationBridge] Failed to show sidebar:', error);
+                });
+              } else {
+                // Plugin not active, activate it first
+                pluginRegistry.activatePlugin('sidebar-plugin').catch((error: any) => {
+                  console.warn('[MigrationBridge] Failed to activate sidebar plugin:', error);
+                });
+              }
             } else {
-              // Plugin not active, activate it first
-              pluginRegistry.activatePlugin('sidebar-plugin').catch((error: any) => {
-                console.warn('[MigrationBridge] Failed to activate sidebar plugin:', error);
-              });
+              console.warn('[MigrationBridge] Sidebar plugin not found');
             }
-          } else {
-            console.warn('[MigrationBridge] Sidebar plugin not found');
-          }
-        }).catch(error => {
-          console.warn('[MigrationBridge] Failed to import plugin registry:', error);
-        });
+          })
+          .catch(error => {
+            console.warn('[MigrationBridge] Failed to import plugin registry:', error);
+          });
       },
       hideSidebar: () => {
         // Hide sidebar through direct plugin call to avoid circular events
-        import('../plugins/plugin-registry').then(({ pluginRegistry }) => {
-          const sidebarPlugin = pluginRegistry.getPluginByName('sidebar-plugin') as any;
-          if (sidebarPlugin && sidebarPlugin.getStatus() === 'active') {
-            sidebarPlugin.hideSidebar();
-          }
-        }).catch(error => {
-          console.warn('[MigrationBridge] Failed to import plugin registry:', error);
-        });
+        import('../plugins/plugin-registry')
+          .then(({ pluginRegistry }) => {
+            const sidebarPlugin = pluginRegistry.getPluginByName('sidebar-plugin') as any;
+            if (sidebarPlugin && sidebarPlugin.getStatus() === 'active') {
+              sidebarPlugin.hideSidebar();
+            }
+          })
+          .catch(error => {
+            console.warn('[MigrationBridge] Failed to import plugin registry:', error);
+          });
       },
       supportsFileUpload: () => {
         return this.plugin?.capabilities.includes('file-attachment') || false;
@@ -94,7 +100,7 @@ export class LegacyAdapterBridge {
         if (this.plugin?.attachFile) {
           await this.plugin.attachFile(file);
         }
-      }
+      },
     };
   }
 }
@@ -111,7 +117,7 @@ export class ToggleStateMigration {
     if (legacyState.mcpEnabled) {
       eventBus.emit('adapter:activated', {
         pluginName: 'legacy-adapter',
-        timestamp: Date.now()
+        timestamp: Date.now(),
       });
     }
 
@@ -125,11 +131,11 @@ export class ToggleStateMigration {
       sidebarWidth: 320, // Default value
       isMinimized: false, // Default value
       customInstructions: '', // Default value
-      customInstructionsEnabled: false // Default value
+      customInstructionsEnabled: false, // Default value
     };
 
     eventBus.emit('ui:preferences-updated', {
-      preferences: currentPreferences
+      preferences: currentPreferences,
     });
   }
 
@@ -146,7 +152,7 @@ export class ToggleStateMigration {
       sidebarWidth: 320,
       isMinimized: false,
       customInstructions: '',
-      customInstructionsEnabled: false
+      customInstructionsEnabled: false,
     };
   }
 
@@ -164,19 +170,19 @@ export class ToggleStateMigration {
           mcpEnabled: !!adapterState?.activeAdapterName,
           autoInsert: uiState?.preferences?.autoSubmit || false,
           autoSubmit: uiState?.preferences?.autoSubmit || false,
-          autoExecute: false // Default for now
+          autoExecute: false, // Default for now
         };
       },
       setMCPEnabled: (enabled: boolean) => {
         if (enabled) {
           eventBus.emit('adapter:activated', {
             pluginName: 'legacy-bridge',
-            timestamp: Date.now()
+            timestamp: Date.now(),
           });
         } else {
           eventBus.emit('adapter:deactivated', {
             pluginName: 'legacy-bridge',
-            timestamp: Date.now()
+            timestamp: Date.now(),
           });
         }
       },
@@ -196,7 +202,7 @@ export class ToggleStateMigration {
         // Trigger UI update through event system
         const preferences = this.getDefaultPreferences();
         eventBus.emit('ui:preferences-updated', { preferences });
-      }
+      },
     };
   }
 }
@@ -239,7 +245,7 @@ export class MigrationTracker {
 export function createHybridAdapter(
   legacyAdapter: SimpleSiteAdapter,
   newPlugin?: AdapterPlugin,
-  context?: PluginContext
+  context?: PluginContext,
 ): SimpleSiteAdapter {
   // If new plugin is available and context is provided, prefer new system
   if (newPlugin && context && isNewArchitectureAvailable()) {

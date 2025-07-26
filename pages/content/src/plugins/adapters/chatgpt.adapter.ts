@@ -13,23 +13,26 @@ import type { AdapterCapability, PluginContext } from '../plugin-types';
 export class ChatGPTAdapter extends BaseAdapterPlugin {
   readonly name = 'ChatGPTAdapter';
   readonly version = '2.0.0'; // Incremented for new architecture
-  readonly hostnames = ['chatgpt.com'];
+  readonly hostnames = ['chatgpt.com', 'chat.openai.com'];
   readonly capabilities: AdapterCapability[] = [
     'text-insertion',
     'form-submission',
     'file-attachment',
-    'dom-manipulation'
+    'dom-manipulation',
   ];
 
   // CSS selectors for ChatGPT's UI elements
   // Updated selectors based on current ChatGPT interface
   private readonly selectors = {
     // Primary chat input selector (ProseMirror contenteditable)
-    CHAT_INPUT: '#prompt-textarea, .ProseMirror[contenteditable="true"], div[contenteditable="true"][data-id*="prompt"]',
+    CHAT_INPUT:
+      '#prompt-textarea, .ProseMirror[contenteditable="true"], div[contenteditable="true"][data-id*="prompt"]',
     // Submit button selectors (multiple fallbacks)
-    SUBMIT_BUTTON: 'button[data-testid="send-button"], button[aria-label*="Send"], button[data-testid="fruitjuice-send-button"], button:has(svg) + button:has(svg[viewBox="0 0 20 20"])',
+    SUBMIT_BUTTON:
+      'button[data-testid="send-button"], button[aria-label*="Send"], button[data-testid="fruitjuice-send-button"], button:has(svg) + button:has(svg[viewBox="0 0 20 20"])',
     // File upload related selectors
-    FILE_UPLOAD_BUTTON: '#upload-file-btn, button[aria-label*="Add photos"], button[data-testid="composer-action-file-upload"] button',
+    FILE_UPLOAD_BUTTON:
+      '#upload-file-btn, button[aria-label*="Add photos"], button[data-testid="composer-action-file-upload"] button',
     FILE_INPUT: 'input[type="file"][multiple]',
     // Main panel and container selectors
     MAIN_PANEL: 'main, .chat-container, [data-testid="conversation-turn-wrapper"]',
@@ -38,9 +41,10 @@ export class ChatGPTAdapter extends BaseAdapterPlugin {
     // File preview elements
     FILE_PREVIEW: '.file-preview, .attachment-preview, [data-testid="file-attachment"]',
     // Button insertion points (for MCP popover)
-    BUTTON_INSERTION_CONTAINER: '[data-testid="composer-footer-actions"], .composer-footer-actions, .flex.items-center[data-testid*="composer"]',
+    BUTTON_INSERTION_CONTAINER:
+      '[data-testid="composer-footer-actions"], .composer-footer-actions, .flex.items-center[data-testid*="composer"]',
     // Alternative insertion points
-    FALLBACK_INSERTION: '.composer-parent, .relative.flex.w-full.items-end, [data-testid="composer-trailing-actions"]'
+    FALLBACK_INSERTION: '.composer-parent, .relative.flex.w-full.items-end, [data-testid="composer-trailing-actions"]',
   };
 
   // URL patterns for navigation tracking
@@ -52,16 +56,16 @@ export class ChatGPTAdapter extends BaseAdapterPlugin {
   private mcpPopoverRoot: any = null; // Store React root to prevent multiple roots
   private mutationObserver: MutationObserver | null = null;
   private popoverCheckInterval: NodeJS.Timeout | null = null;
-  
+
   // Setup state tracking
   private storeEventListenersSetup: boolean = false;
   private domObserversSetup: boolean = false;
   private uiIntegrationSetup: boolean = false;
-  
+
   // Instance tracking for debugging
   private static instanceCount = 0;
   private instanceId: number;
-  
+
   // Styling state tracking
   private chatgptStylesInjected: boolean = false;
 
@@ -69,13 +73,17 @@ export class ChatGPTAdapter extends BaseAdapterPlugin {
     super();
     ChatGPTAdapter.instanceCount++;
     this.instanceId = ChatGPTAdapter.instanceCount;
-    console.log(`[ChatGPTAdapter] Instance #${this.instanceId} created. Total instances: ${ChatGPTAdapter.instanceCount}`);
+    console.log(
+      `[ChatGPTAdapter] Instance #${this.instanceId} created. Total instances: ${ChatGPTAdapter.instanceCount}`,
+    );
   }
 
   async initialize(context: PluginContext): Promise<void> {
     // Guard against multiple initialization
     if (this.currentStatus === 'initializing' || this.currentStatus === 'active') {
-      this.context?.logger.warn(`ChatGPT adapter instance #${this.instanceId} already initialized or active, skipping re-initialization`);
+      this.context?.logger.warn(
+        `ChatGPT adapter instance #${this.instanceId} already initialized or active, skipping re-initialization`,
+      );
       return;
     }
 
@@ -110,7 +118,7 @@ export class ChatGPTAdapter extends BaseAdapterPlugin {
     // Emit activation event for store synchronization
     this.context.eventBus.emit('adapter:activated', {
       pluginName: this.name,
-      timestamp: Date.now()
+      timestamp: Date.now(),
     });
   }
 
@@ -136,7 +144,7 @@ export class ChatGPTAdapter extends BaseAdapterPlugin {
     // Emit deactivation event
     this.context.eventBus.emit('adapter:deactivated', {
       pluginName: this.name,
-      timestamp: Date.now()
+      timestamp: Date.now(),
     });
   }
 
@@ -159,14 +167,14 @@ export class ChatGPTAdapter extends BaseAdapterPlugin {
     // Final cleanup
     this.cleanupUIIntegration();
     this.cleanupDOMObservers();
-    
+
     // Remove injected ChatGPT styles
     const styleElement = document.getElementById('mcp-chatgpt-button-styles');
     if (styleElement) {
       styleElement.remove();
       this.chatgptStylesInjected = false;
     }
-    
+
     // Reset all setup flags
     this.storeEventListenersSetup = false;
     this.domObserversSetup = false;
@@ -179,7 +187,9 @@ export class ChatGPTAdapter extends BaseAdapterPlugin {
    * Enhanced with better selector handling and event integration
    */
   async insertText(text: string, options?: { targetElement?: HTMLElement }): Promise<boolean> {
-    this.context.logger.info(`Attempting to insert text into ChatGPT chat input: ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`);
+    this.context.logger.info(
+      `Attempting to insert text into ChatGPT chat input: ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`,
+    );
 
     let targetElement: HTMLElement | null = null;
 
@@ -219,7 +229,7 @@ export class ChatGPTAdapter extends BaseAdapterPlugin {
 
       // Create a new paragraph element with the text
       const newContent = originalContent ? originalContent + '\n' + text : text;
-      
+
       // Clear existing content and insert new content
       targetElement.innerHTML = '';
       const paragraph = document.createElement('p');
@@ -233,14 +243,20 @@ export class ChatGPTAdapter extends BaseAdapterPlugin {
       targetElement.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true }));
 
       // Emit success event to the new event system
-      this.emitExecutionCompleted('insertText', { text }, {
-        success: true,
-        originalLength: originalContent.length,
-        newLength: text.length,
-        totalLength: newContent.length
-      });
+      this.emitExecutionCompleted(
+        'insertText',
+        { text },
+        {
+          success: true,
+          originalLength: originalContent.length,
+          newLength: text.length,
+          totalLength: newContent.length,
+        },
+      );
 
-      this.context.logger.info(`Text inserted successfully. Original: ${originalContent.length}, Added: ${text.length}, Total: ${newContent.length}`);
+      this.context.logger.info(
+        `Text inserted successfully. Original: ${originalContent.length}, Added: ${text.length}, Total: ${newContent.length}`,
+      );
       return true;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -295,13 +311,17 @@ export class ChatGPTAdapter extends BaseAdapterPlugin {
       submitButton.click();
 
       // Emit success event to the new event system
-      this.emitExecutionCompleted('submitForm', {
-        formElement: options?.formElement?.tagName || 'unknown'
-      }, {
-        success: true,
-        method: 'submitButton.click',
-        buttonSelector: selectors.find(s => document.querySelector(s.trim()) === submitButton)
-      });
+      this.emitExecutionCompleted(
+        'submitForm',
+        {
+          formElement: options?.formElement?.tagName || 'unknown',
+        },
+        {
+          success: true,
+          method: 'submitButton.click',
+          buttonSelector: selectors.find(s => document.querySelector(s.trim()) === submitButton),
+        },
+      );
 
       this.context.logger.info('ChatGPT chat input submitted successfully');
       return true;
@@ -335,7 +355,7 @@ export class ChatGPTAdapter extends BaseAdapterPlugin {
 
       // Try to find file input element
       let fileInput: HTMLInputElement | null = options?.inputElement || null;
-      
+
       if (!fileInput) {
         fileInput = document.querySelector(this.selectors.FILE_INPUT) as HTMLInputElement;
       }
@@ -361,29 +381,37 @@ export class ChatGPTAdapter extends BaseAdapterPlugin {
       const previewFound = await this.checkFilePreview();
 
       if (previewFound) {
-        this.emitExecutionCompleted('attachFile', {
-          fileName: file.name,
-          fileType: file.type,
-          fileSize: file.size,
-          inputElement: options?.inputElement?.tagName || 'unknown'
-        }, {
-          success: true,
-          previewFound: true,
-          method: fileInput ? 'file-input' : 'drag-drop-simulation'
-        });
+        this.emitExecutionCompleted(
+          'attachFile',
+          {
+            fileName: file.name,
+            fileType: file.type,
+            fileSize: file.size,
+            inputElement: options?.inputElement?.tagName || 'unknown',
+          },
+          {
+            success: true,
+            previewFound: true,
+            method: fileInput ? 'file-input' : 'drag-drop-simulation',
+          },
+        );
         this.context.logger.info(`File attached successfully: ${file.name}`);
         return true;
       } else {
         // Still consider it successful even if preview not found (optimistic)
-        this.emitExecutionCompleted('attachFile', {
-          fileName: file.name,
-          fileType: file.type,
-          fileSize: file.size
-        }, {
-          success: true,
-          previewFound: false,
-          method: fileInput ? 'file-input' : 'drag-drop-simulation'
-        });
+        this.emitExecutionCompleted(
+          'attachFile',
+          {
+            fileName: file.name,
+            fileType: file.type,
+            fileSize: file.size,
+          },
+          {
+            success: true,
+            previewFound: false,
+            method: fileInput ? 'file-input' : 'drag-drop-simulation',
+          },
+        );
         this.context.logger.info(`File attachment initiated (preview not confirmed): ${file.name}`);
         return true;
       }
@@ -394,6 +422,67 @@ export class ChatGPTAdapter extends BaseAdapterPlugin {
       return false;
     }
   }
+
+  /**
+   * Detach a file from the ChatGPT chat input
+   * Implements the same robust logic as Gemini's detachFile method
+   */
+  async detachFile(fileName?: string): Promise<boolean> {
+    // Safety Check 1: Adapter Name Check
+    if (this.name !== 'ChatGPTAdapter') {
+      this.context.logger.warn('detachFile called on non-ChatGPT adapter, skipping');
+      return false;
+    }
+
+    // Safety Check 2: Hostname Check
+    if (!window.location.hostname.includes('chat.openai.com') && !window.location.hostname.includes('chatgpt.com')) {
+      this.context.logger.warn('detachFile called on non-ChatGPT hostname, skipping');
+      return false;
+    }
+
+    this.context.logger.info(`Attempting to detach file${fileName ? `: ${fileName}` : ''} from ChatGPT using direct button click`);
+
+    try {
+      // Safety Check 3: Element Existence Check - Look for the remove button directly
+      const removeButton = document.querySelector('button[aria-label="Remove file"]');
+      
+      if (!removeButton) {
+        this.context.logger.warn('Remove file button not found on ChatGPT');
+        return false;
+      }
+
+      this.context.logger.debug('Found Remove file button, proceeding with direct click');
+
+      // Click the remove button directly (simulates user action)
+      if (removeButton instanceof HTMLElement) {
+        removeButton.click();
+        this.context.logger.info(`Successfully clicked Remove file button to detach file${fileName ? `: ${fileName}` : ''}`);
+        
+        // Wait and verify the button was removed
+        await new Promise(resolve => setTimeout(resolve, 500));
+        const buttonStillExists = document.contains(removeButton);
+        
+        if (!buttonStillExists) {
+          this.context.logger.info(`File successfully detached${fileName ? `: ${fileName}` : ''}`);
+          // Note: We do NOT emit tool:execution-completed event to prevent unwanted auto-submit
+          return true;
+        } else {
+          this.context.logger.warn(`Remove button still exists after clicking${fileName ? ` for: ${fileName}` : ''}`);
+          return false;
+        }
+      } else {
+        this.context.logger.error('Remove button is not an HTMLElement');
+        return false;
+      }
+
+
+
+          } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        this.context.logger.error(`Error detaching file from ChatGPT: ${errorMessage}`);
+        return false;
+      }
+    }
 
   /**
    * Check if the current page/URL is supported by this adapter
@@ -421,10 +510,14 @@ export class ChatGPTAdapter extends BaseAdapterPlugin {
 
     // Check if we're on a supported ChatGPT page
     const supportedPatterns = [
-      /^https:\/\/chatgpt\.com\/$/,           // Main page
-      /^https:\/\/chatgpt\.com\/c\/.*/,      // Specific conversations
-      /^https:\/\/chatgpt\.com\/g\/.*/,      // Custom GPTs
-      /^https:\/\/chatgpt\.com\/\?.*/        // Chat with query params
+      /^https:\/\/chatgpt\.com\/$/, // Main page
+      /^https:\/\/chatgpt\.com\/c\/.*/, // Specific conversations
+      /^https:\/\/chatgpt\.com\/g\/.*/, // Custom GPTs
+      /^https:\/\/chatgpt\.com\/\?.*/, // Chat with query params
+      /^https:\/\/chat\.openai\.com\/$/, // OpenAI chat main page
+      /^https:\/\/chat\.openai\.com\/c\/.*/, // OpenAI specific conversations
+      /^https:\/\/chat\.openai\.com\/g\/.*/, // OpenAI custom GPTs
+      /^https:\/\/chat\.openai\.com\/\?.*/, // OpenAI chat with query params
     ];
 
     const isSupported = supportedPatterns.some(pattern => pattern.test(currentUrl));
@@ -733,14 +826,14 @@ export class ChatGPTAdapter extends BaseAdapterPlugin {
     this.context.logger.debug(`Setting up store event listeners for ChatGPT adapter instance #${this.instanceId}`);
 
     // Listen for tool execution events from the store
-    this.context.eventBus.on('tool:execution-completed', (data) => {
+    this.context.eventBus.on('tool:execution-completed', data => {
       this.context.logger.debug('Tool execution completed:', data);
       // Handle auto-actions based on store state
       this.handleToolExecutionCompleted(data);
     });
 
     // Listen for UI state changes
-    this.context.eventBus.on('ui:sidebar-toggle', (data) => {
+    this.context.eventBus.on('ui:sidebar-toggle', data => {
       this.context.logger.debug('Sidebar toggled:', data);
     });
 
@@ -756,10 +849,10 @@ export class ChatGPTAdapter extends BaseAdapterPlugin {
     this.context.logger.debug(`Setting up DOM observers for ChatGPT adapter instance #${this.instanceId}`);
 
     // Set up mutation observer to detect page changes and re-inject UI if needed
-    this.mutationObserver = new MutationObserver((mutations) => {
+    this.mutationObserver = new MutationObserver(mutations => {
       let shouldReinject = false;
 
-      mutations.forEach((mutation) => {
+      mutations.forEach(mutation => {
         if (mutation.type === 'childList') {
           // Check if our MCP popover was removed
           if (!document.getElementById('mcp-popover-container')) {
@@ -777,9 +870,9 @@ export class ChatGPTAdapter extends BaseAdapterPlugin {
     // Start observing
     this.mutationObserver.observe(document.body, {
       childList: true,
-      subtree: true
+      subtree: true,
     });
-    
+
     this.domObserversSetup = true;
   }
 
@@ -787,7 +880,9 @@ export class ChatGPTAdapter extends BaseAdapterPlugin {
     // Allow multiple calls for UI integration (for re-injection after page changes)
     // but log it for debugging
     if (this.uiIntegrationSetup) {
-      this.context.logger.debug(`UI integration already set up for instance #${this.instanceId}, re-injecting for page changes`);
+      this.context.logger.debug(
+        `UI integration already set up for instance #${this.instanceId}, re-injecting for page changes`,
+      );
     } else {
       this.context.logger.debug(`Setting up UI integration for ChatGPT adapter instance #${this.instanceId}`);
       this.uiIntegrationSetup = true;
@@ -803,7 +898,7 @@ export class ChatGPTAdapter extends BaseAdapterPlugin {
   }
 
   private async waitForPageReady(): Promise<void> {
-    return new Promise((resolve) => {
+    return new Promise(resolve => {
       const checkReady = () => {
         // Check if the page has the necessary elements
         const insertionPoint = this.findButtonInsertionPoint();
@@ -947,7 +1042,7 @@ export class ChatGPTAdapter extends BaseAdapterPlugin {
       '.composer-footer-actions',
       '.flex.items-center[data-testid*="composer"]',
       '.relative.flex.w-full.items-end',
-      '[data-testid="composer-trailing-actions"]'
+      '[data-testid="composer-trailing-actions"]',
     ];
 
     for (const selector of fallbackSelectors) {
@@ -1013,70 +1108,76 @@ export class ChatGPTAdapter extends BaseAdapterPlugin {
       }
 
       // Import React and ReactDOM dynamically to avoid bundling issues
-      import('react').then(React => {
-        import('react-dom/client').then(ReactDOM => {
-          import('../../components/mcpPopover/mcpPopover').then(({ MCPPopover }) => {
-            // Double-check container is still valid
-            if (!container || !container.isConnected) {
-              this.context.logger.warn('Container became invalid during async import, aborting render');
-              return;
-            }
+      import('react')
+        .then(React => {
+          import('react-dom/client')
+            .then(ReactDOM => {
+              import('../../components/mcpPopover/mcpPopover')
+                .then(({ MCPPopover }) => {
+                  // Double-check container is still valid
+                  if (!container || !container.isConnected) {
+                    this.context.logger.warn('Container became invalid during async import, aborting render');
+                    return;
+                  }
 
-            // Create toggle state manager that integrates with new stores
-            const toggleStateManager = this.createToggleStateManager();
+                  // Create toggle state manager that integrates with new stores
+                  const toggleStateManager = this.createToggleStateManager();
 
-            // Create adapter button configuration for ChatGPT styling
-            const adapterButtonConfig = {
-              className: 'mcp-chatgpt-button-base',
-              contentClassName: 'mcp-chatgpt-button-content',
-              textClassName: 'mcp-chatgpt-button-text',
-              activeClassName: 'mcp-button-active'
-            };
+                  // Create adapter button configuration for ChatGPT styling
+                  const adapterButtonConfig = {
+                    className: 'mcp-chatgpt-button-base',
+                    contentClassName: 'mcp-chatgpt-button-content',
+                    textClassName: 'mcp-chatgpt-button-text',
+                    activeClassName: 'mcp-button-active',
+                  };
 
-            try {
-              // Prevent multiple React roots on the same container
-              if (this.mcpPopoverRoot) {
-                this.context.logger.debug('Unmounting existing React root before creating new one');
-                try {
-                  this.mcpPopoverRoot.unmount();
-                } catch (unmountError) {
-                  this.context.logger.warn('Error unmounting existing React root:', unmountError);
-                }
-                this.mcpPopoverRoot = null;
-              }
+                  try {
+                    // Prevent multiple React roots on the same container
+                    if (this.mcpPopoverRoot) {
+                      this.context.logger.debug('Unmounting existing React root before creating new one');
+                      try {
+                        this.mcpPopoverRoot.unmount();
+                      } catch (unmountError) {
+                        this.context.logger.warn('Error unmounting existing React root:', unmountError);
+                      }
+                      this.mcpPopoverRoot = null;
+                    }
 
-              // Create React root and render with error boundary
-              this.mcpPopoverRoot = ReactDOM.createRoot(container);
-              this.mcpPopoverRoot.render(
-                React.createElement(MCPPopover, {
-                  toggleStateManager: toggleStateManager,
-                  adapterButtonConfig: adapterButtonConfig,
-                  adapterName: this.name
+                    // Create React root and render with error boundary
+                    this.mcpPopoverRoot = ReactDOM.createRoot(container);
+                    this.mcpPopoverRoot.render(
+                      React.createElement(MCPPopover, {
+                        toggleStateManager: toggleStateManager,
+                        adapterButtonConfig: adapterButtonConfig,
+                        adapterName: this.name,
+                      }),
+                    );
+
+                    this.context.logger.info('MCP popover rendered successfully with new architecture');
+                  } catch (renderError) {
+                    this.context.logger.error('Error during React render:', renderError);
+                    // Clean up failed root
+                    if (this.mcpPopoverRoot) {
+                      try {
+                        this.mcpPopoverRoot.unmount();
+                      } catch (cleanupError) {
+                        this.context.logger.warn('Error cleaning up failed React root:', cleanupError);
+                      }
+                      this.mcpPopoverRoot = null;
+                    }
+                  }
                 })
-              );
-
-              this.context.logger.info('MCP popover rendered successfully with new architecture');
-            } catch (renderError) {
-              this.context.logger.error('Error during React render:', renderError);
-              // Clean up failed root
-              if (this.mcpPopoverRoot) {
-                try {
-                  this.mcpPopoverRoot.unmount();
-                } catch (cleanupError) {
-                  this.context.logger.warn('Error cleaning up failed React root:', cleanupError);
-                }
-                this.mcpPopoverRoot = null;
-              }
-            }
-          }).catch(error => {
-            this.context.logger.error('Failed to import MCPPopover component:', error);
-          });
-        }).catch(error => {
-          this.context.logger.error('Failed to import ReactDOM:', error);
+                .catch(error => {
+                  this.context.logger.error('Failed to import MCPPopover component:', error);
+                });
+            })
+            .catch(error => {
+              this.context.logger.error('Failed to import ReactDOM:', error);
+            });
+        })
+        .catch(error => {
+          this.context.logger.error('Failed to import React:', error);
         });
-      }).catch(error => {
-        this.context.logger.error('Failed to import React:', error);
-      });
     } catch (error) {
       this.context.logger.error('Failed to render MCP popover:', error);
     }
@@ -1092,7 +1193,7 @@ export class ChatGPTAdapter extends BaseAdapterPlugin {
         try {
           // Get state from UI store - MCP enabled state should be the persistent MCP toggle state
           const uiState = context.stores.ui;
-          
+
           // Get the persistent MCP enabled state and other preferences
           const mcpEnabled = uiState?.mcpEnabled ?? false;
           const autoSubmitEnabled = uiState?.preferences?.autoSubmit ?? false;
@@ -1103,7 +1204,7 @@ export class ChatGPTAdapter extends BaseAdapterPlugin {
             mcpEnabled: mcpEnabled, // Use the persistent MCP state
             autoInsert: autoSubmitEnabled,
             autoSubmit: autoSubmitEnabled,
-            autoExecute: false // Default for now, can be extended
+            autoExecute: false, // Default for now, can be extended
           };
         } catch (error) {
           context.logger.error('Error getting toggle state:', error);
@@ -1112,13 +1213,15 @@ export class ChatGPTAdapter extends BaseAdapterPlugin {
             mcpEnabled: false,
             autoInsert: false,
             autoSubmit: false,
-            autoExecute: false
+            autoExecute: false,
           };
         }
       },
 
       setMCPEnabled: (enabled: boolean) => {
-        context.logger.debug(`Setting MCP ${enabled ? 'enabled' : 'disabled'} - controlling sidebar visibility via MCP state`);
+        context.logger.debug(
+          `Setting MCP ${enabled ? 'enabled' : 'disabled'} - controlling sidebar visibility via MCP state`,
+        );
 
         try {
           // Primary method: Control MCP state through UI store (which will automatically control sidebar)
@@ -1127,7 +1230,7 @@ export class ChatGPTAdapter extends BaseAdapterPlugin {
             context.logger.debug(`MCP state set to: ${enabled} via UI store`);
           } else {
             context.logger.warn('UI store setMCPEnabled method not available');
-            
+
             // Fallback: Control sidebar visibility directly if MCP state setter not available
             if (context.stores.ui?.setSidebarVisibility) {
               context.stores.ui.setSidebarVisibility(enabled, 'mcp-popover-toggle-fallback');
@@ -1153,7 +1256,33 @@ export class ChatGPTAdapter extends BaseAdapterPlugin {
             context.logger.warn('activeSidebarManager not available on window - will rely on UI store only');
           }
 
-          context.logger.info(`MCP toggle completed: MCP ${enabled ? 'enabled' : 'disabled'}, sidebar ${enabled ? 'shown' : 'hidden'}`);
+          // Auto-detach files when MCP is disabled (same as Gemini)
+          if (!enabled) {
+            setTimeout(() => {
+              const currentAdapter = (window as any).currentChatGPTAdapter || 
+                                   (window as any).mcpAdapter || 
+                                   context.stores?.adapter?.getActiveAdapter();
+              
+              if (currentAdapter && typeof currentAdapter.detachFile === 'function') {
+                context.logger.info('Calling detachFile on ChatGPT adapter');
+                currentAdapter.detachFile().catch((error: any) => {
+                  context.logger.error('Error auto-detaching file:', error);
+                });
+              } else {
+                context.logger.warn('Current ChatGPT adapter not available for auto-detachment. Available methods:',
+                  {
+                    windowAdapter: !!(window as any).currentChatGPTAdapter,
+                    pluginRegistry: !!(window as any).mcpPluginRegistry,
+                    storesAdapter: !!context.stores?.adapter
+                  }
+                );
+              }
+            }, 100);
+          }
+
+          context.logger.info(
+            `MCP toggle completed: MCP ${enabled ? 'enabled' : 'disabled'}, sidebar ${enabled ? 'shown' : 'hidden'}`,
+          );
         } catch (error) {
           context.logger.error('Error in setMCPEnabled:', error);
         }
@@ -1197,11 +1326,11 @@ export class ChatGPTAdapter extends BaseAdapterPlugin {
         if (popoverContainer) {
           const currentState = stateManager.getState();
           const event = new CustomEvent('mcp:update-toggle-state', {
-            detail: { toggleState: currentState }
+            detail: { toggleState: currentState },
           });
           popoverContainer.dispatchEvent(event);
         }
-      }
+      },
     };
 
     return stateManager;
@@ -1227,7 +1356,7 @@ export class ChatGPTAdapter extends BaseAdapterPlugin {
       // Find drop zone
       const dropZoneSelectors = this.selectors.DROP_ZONE.split(', ');
       let dropZone: Element | null = null;
-      
+
       for (const selector of dropZoneSelectors) {
         dropZone = document.querySelector(selector.trim());
         if (dropZone) break;
@@ -1245,15 +1374,15 @@ export class ChatGPTAdapter extends BaseAdapterPlugin {
       // Simulate drag events
       const dragEnterEvent = new DragEvent('dragenter', {
         bubbles: true,
-        dataTransfer: dataTransfer
+        dataTransfer: dataTransfer,
       });
       const dragOverEvent = new DragEvent('dragover', {
         bubbles: true,
-        dataTransfer: dataTransfer
+        dataTransfer: dataTransfer,
       });
       const dropEvent = new DragEvent('drop', {
         bubbles: true,
-        dataTransfer: dataTransfer
+        dataTransfer: dataTransfer,
       });
 
       // Dispatch events
@@ -1291,8 +1420,8 @@ export class ChatGPTAdapter extends BaseAdapterPlugin {
         parameters,
         result,
         timestamp: Date.now(),
-        status: 'success'
-      }
+        status: 'success',
+      },
     });
   }
 
@@ -1300,7 +1429,7 @@ export class ChatGPTAdapter extends BaseAdapterPlugin {
     this.context.eventBus.emit('tool:execution-failed', {
       toolName,
       error,
-      callId: this.generateCallId()
+      callId: this.generateCallId(),
     });
   }
 
@@ -1317,7 +1446,7 @@ export class ChatGPTAdapter extends BaseAdapterPlugin {
     try {
       // Check if there's an active sidebar manager
       const activeSidebarManager = (window as any).activeSidebarManager;
-      
+
       if (!activeSidebarManager) {
         this.context.logger.warn('No active sidebar manager found after navigation');
         return;
@@ -1325,7 +1454,6 @@ export class ChatGPTAdapter extends BaseAdapterPlugin {
 
       // Sidebar manager exists, just ensure MCP popover connection is working
       this.ensureMCPPopoverConnection();
-      
     } catch (error) {
       this.context.logger.error('Error checking sidebar state after navigation:', error);
     }
@@ -1336,7 +1464,7 @@ export class ChatGPTAdapter extends BaseAdapterPlugin {
    */
   private ensureMCPPopoverConnection(): void {
     this.context.logger.info('Ensuring MCP popover connection after navigation');
-    
+
     try {
       // Check if MCP popover is still injected
       if (!this.isMCPPopoverInjected()) {
@@ -1362,7 +1490,7 @@ export class ChatGPTAdapter extends BaseAdapterPlugin {
     if (stillSupported) {
       // Re-inject styles after page change
       this.injectChatGPTButtonStyles();
-      
+
       // Re-setup UI integration after page change
       setTimeout(() => {
         this.setupUIIntegration();
@@ -1379,7 +1507,7 @@ export class ChatGPTAdapter extends BaseAdapterPlugin {
     // Emit page change event to stores
     this.context.eventBus.emit('app:site-changed', {
       site: url,
-      hostname: window.location.hostname
+      hostname: window.location.hostname,
     });
   }
 
@@ -1393,7 +1521,7 @@ export class ChatGPTAdapter extends BaseAdapterPlugin {
       // Emit deactivation event using available event type
       this.context.eventBus.emit('adapter:deactivated', {
         pluginName: this.name,
-        timestamp: Date.now()
+        timestamp: Date.now(),
       });
     } else {
       // Re-setup for new host

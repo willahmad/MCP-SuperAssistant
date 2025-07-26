@@ -178,13 +178,8 @@ const Sidebar: React.FC<SidebarProps> = ({ initialPreferences }) => {
 
       // The connection store will be updated by the MCP client,
       // but we can add additional UI feedback here if needed
-      if (data.status === 'connected') {
-        // Automatically refresh tools when connection is established
-        logMessage('[Sidebar] Connection established, refreshing tools...');
-        refreshTools(true).catch(error => {
-          logMessage(`[Sidebar] Failed to refresh tools after connection: ${error}`);
-        });
-      }
+      // NOTE: Removed automatic tool refresh on connection status change to prevent excessive refreshing
+      // Tools will be refreshed by the background script's 60-second interval and initial connection logic
     });
     unsubscribeCallbacks.push(unsubscribeConnection);
 
@@ -223,10 +218,8 @@ const Sidebar: React.FC<SidebarProps> = ({ initialPreferences }) => {
       if (initializationError?.includes('Extension was reloaded')) {
         setInitializationError(null);
       }
-      // Try to reconnect when context is restored
-      forceReconnect().catch(error => {
-        logMessage(`[Sidebar] Failed to reconnect after context restoration: ${error}`);
-      });
+      // NOTE: Removed automatic reconnection after context restoration to prevent excessive refreshing
+      // Tools will be refreshed by the background script's 60-second interval
     });
     unsubscribeCallbacks.push(unsubscribeBridgeRestored);
 
@@ -255,15 +248,14 @@ const Sidebar: React.FC<SidebarProps> = ({ initialPreferences }) => {
   }, [serverStatus, availableTools.length, refreshTools]);
 
   // Use store values with fallbacks to initial preferences
-  const isMinimized = storeSidebarMinimized ?? (initialPreferences?.isMinimized ?? false);
   const sidebarWidth = storeSidebarWidth || initialPreferences?.sidebarWidth || SIDEBAR_DEFAULT_WIDTH;
   const isPushMode = preferences.isPushMode ?? initialPreferences?.isPushMode ?? false;
   const autoSubmit = preferences.autoSubmit ?? initialPreferences?.autoSubmit ?? false;
 
   // Debug logging for state tracking
   useEffect(() => {
-    logMessage(`[Sidebar] State update - visible: ${sidebarVisible}, minimized: ${isMinimized}, pushMode: ${isPushMode}, width: ${sidebarWidth}`);
-  }, [sidebarVisible, isMinimized, isPushMode, sidebarWidth]);
+    logMessage(`[Sidebar] State update - visible: ${sidebarVisible}, pushMode: ${isPushMode}, width: ${sidebarWidth}`);
+  }, [sidebarVisible, isPushMode, sidebarWidth]);
 
   // Local UI state that doesn't need to be in the store
   const [activeTab, setActiveTab] = useState<'availableTools' | 'instructions'>('availableTools');
@@ -397,7 +389,7 @@ const Sidebar: React.FC<SidebarProps> = ({ initialPreferences }) => {
 
   // Apply push mode when settings change - with robust retry mechanism
   useEffect(() => {
-    logMessage(`[Sidebar] Push mode effect triggered - visible: ${sidebarVisible}, pushMode: ${isPushMode}, minimized: ${isMinimized}, width: ${sidebarWidth}`);
+    logMessage(`[Sidebar] Push mode effect triggered - visible: ${sidebarVisible}, pushMode: ${isPushMode}, width: ${sidebarWidth}`);
     
     // Use async function to handle the retry mechanism
     const applyPushModeSettings = async () => {
@@ -412,12 +404,11 @@ const Sidebar: React.FC<SidebarProps> = ({ initialPreferences }) => {
             // Apply push mode settings when visible
             if (sidebarVisible) {
               logMessage(
-                `[Sidebar] Applying push mode (${isPushMode}, minimized: ${isMinimized}) and width (${sidebarWidth})`
+                `[Sidebar] Applying push mode (${isPushMode}) and width (${sidebarWidth})`
               );
               sidebarManager.setPushContentMode(
                 isPushMode,
-                isMinimized ? SIDEBAR_MINIMIZED_WIDTH : sidebarWidth,
-                isMinimized,
+                sidebarWidth,
               );
             } else {
               // Ensure push mode is disabled when sidebar is hidden
@@ -441,7 +432,7 @@ const Sidebar: React.FC<SidebarProps> = ({ initialPreferences }) => {
 
     // Execute the async function
     applyPushModeSettings();
-  }, [isPushMode, sidebarWidth, isMinimized, sidebarVisible, waitForSidebarManager]);
+  }, [isPushMode, sidebarWidth, sidebarVisible, waitForSidebarManager]);
 
   // Cleanup: Ensure push mode is disabled when component unmounts - with retry mechanism
   useEffect(() => {
@@ -488,24 +479,6 @@ const Sidebar: React.FC<SidebarProps> = ({ initialPreferences }) => {
       transitionTimerRef.current = null;
     }, 500) as unknown as number;
   };
-
-  const handleToggleMinimize = () => {
-    startTransition();
-
-    // Add a subtle bounce effect to the toggle
-    if (sidebarRef.current) {
-      sidebarRef.current.style.transform = 'scale(0.98)';
-      setTimeout(() => {
-        if (sidebarRef.current) {
-          sidebarRef.current.style.transform = '';
-        }
-      }, 100);
-    }
-
-    toggleMinimize('user action');
-  };
-
-  const toggleInputMinimize = () => setIsInputMinimized(prev => !prev);
 
   const handleResize = useCallback(
     (width: number) => {
@@ -636,110 +609,68 @@ const Sidebar: React.FC<SidebarProps> = ({ initialPreferences }) => {
         'fixed top-0 right-0 h-screen bg-white dark:bg-slate-900 shadow-lg z-50 flex flex-col border-l border-slate-200 dark:border-slate-700 sidebar',
         isPushMode ? 'push-mode' : '',
         isResizingRef.current ? 'resizing' : '',
-        isMinimized ? 'collapsed' : '',
         isTransitioning ? 'sidebar-transitioning' : '',
       )}
-      style={{ width: isMinimized ? `${SIDEBAR_MINIMIZED_WIDTH}px` : `${sidebarWidth}px` }}>
+      style={{ width: `${sidebarWidth}px` }}>
       {/* Resize Handle - only visible when not minimized */}
-      {!isMinimized && (
         <ResizeHandle
           onResize={handleResize}
           minWidth={SIDEBAR_DEFAULT_WIDTH}
           maxWidth={500}
           className="absolute left-0 top-0 bottom-0 w-1 cursor-ew-resize hover:bg-indigo-400 dark:hover:bg-indigo-600 z-[60] transition-colors duration-300"
         />
-      )}
-
-      {/* Header - Adjust content based on isMinimized */}
-      <div className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 p-4 flex items-center justify-between flex-shrink-0 shadow-sm sidebar-header">
-        {!isMinimized ? (
-          <>
-            <div className="flex items-center space-x-2">
-              {/* Always show the header content immediately */}
-              <a
-                href="https://mcpsuperassistant.ai/"
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label="Visit MCP Super Assistant Website"
-                className="block">
-                {' '}
-                {/* Make link block for sizing */}
-                <img
-                  src={chrome.runtime.getURL('icon-34.png')}
-                  alt="MCP Logo"
-                  className="w-8 h-8 rounded-md " // Increase size & add rounded corners
-                />
-              </a>
-              <>
-                {/* Wrap title in link */}
-                <a
-                  href="https://mcpsuperassistant.ai/"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-slate-800 dark:text-slate-100 hover:text-slate-600 dark:hover:text-slate-300 transition-colors duration-150 no-underline"
-                  aria-label="Visit MCP Super Assistant Website">
-                  <Typography variant="h4" className="font-semibold">
-                    MCP SuperAssistant
-                  </Typography>
-                </a>
-                {/* Existing icon link */}
-                <a
-                  href="https://mcpsuperassistant.ai/"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="ml-1 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300 transition-colors duration-150"
-                  aria-label="Visit MCP Super Assistant Website">
-                  <Icon name="arrow-up-right" size="xs" className="inline-block align-baseline" />
-                </a>
-              </>
-            </div>
-            <div className="flex items-center space-x-2 pr-1">
-              {/* Theme Toggle Button */}
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={handleThemeToggle}
-                aria-label={`Toggle theme (current: ${theme})`}
-                className="hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full transition-all duration-200 hover:scale-105">
-                <Icon
-                  name={getCurrentThemeIcon()}
-                  size="sm"
-                  className="transition-all text-indigo-600 dark:text-indigo-400"
-                />
-                <span className="sr-only">Toggle theme</span>
-              </Button>
-              {/* Minimize Button */}
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={handleToggleMinimize}
-                aria-label="Minimize sidebar"
-                className="hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full transition-all duration-200 hover:scale-105">
-                <Icon name="chevron-right" className="h-4 w-4 text-slate-700 dark:text-slate-300" />
-              </Button>
-            </div>
-          </>
-        ) : (
-          // Expand Button when minimized
+      {/* Header - Add close button and theme toggle */}
+      <div className="sidebar-header flex items-center justify-between p-4 border-b border-slate-200 dark:border-slate-700">
+        {/* Close Button - Top Left */}
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => {
+            // Use the same method as the thumbtack icon - direct sidebar manager call
+            if (window.activeSidebarManager && typeof window.activeSidebarManager.hide === 'function') {
+              window.activeSidebarManager.hide();
+              logMessage('[Sidebar] X button clicked - hiding sidebar via activeSidebarManager');
+            } else {
+              // Fallback to store method if sidebar manager not available
+              toggleSidebar('x-button-click');
+              logMessage('[Sidebar] X button clicked - using fallback toggleSidebar method');
+            }
+          }}
+          aria-label="Close sidebar"
+          className="hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full transition-all duration-200 hover:scale-105">
+          <Icon
+            name="x"
+            size="sm"
+            className="transition-all text-slate-600 dark:text-slate-400"
+          />
+          <span className="sr-only">Close sidebar</span>
+        </Button>
+        
+        <Typography variant="h4">SuperAssistant</Typography>
+        
+        <div className="flex items-center space-x-2 pr-1">
+          {/* Theme Toggle Button */}
           <Button
             variant="ghost"
             size="icon"
-            onClick={handleToggleMinimize}
-            aria-label="Expand sidebar"
-            className="mx-auto hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full transition-all duration-200 hover:scale-110">
-            <Icon name="chevron-left" className="h-4 w-4 text-slate-700 dark:text-slate-300" />
+            onClick={handleThemeToggle}
+            aria-label={`Toggle theme (current: ${theme})`}
+            className="hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full transition-all duration-200 hover:scale-105">
+            <Icon
+              name={getCurrentThemeIcon()}
+              size="sm"
+              className="transition-all text-indigo-600 dark:text-indigo-400"
+            />
+            <span className="sr-only">Toggle theme</span>
           </Button>
-        )}
+        </div>
       </div>
-
-      {/* Main Content Area - Using sliding panel approach */}
+      {/* Main Content Area */}
       <div className="sidebar-inner-content flex-1 relative overflow-hidden bg-white dark:bg-slate-900">
-        {/* Virtual slide - content always at full width */}
         <div
           ref={contentRef}
           className={cn(
             'absolute top-0 bottom-0 right-0 transition-transform duration-200 ease-in-out',
-            isMinimized ? 'translate-x-full' : 'translate-x-0',
             isTransitioning ? 'will-change-transform' : '',
           )}
           style={{ width: `${sidebarWidth}px` }}>
@@ -747,93 +678,14 @@ const Sidebar: React.FC<SidebarProps> = ({ initialPreferences }) => {
             {/* Critical Error Display - Only show for severe failures, never block UI */}
             {initializationError && (
               <div className="bg-red-50 dark:bg-red-900/20 border-b border-red-200 dark:border-red-800 p-3 flex-shrink-0">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-start space-x-2">
-                    <Icon name="alert-triangle" size="sm" className="text-red-600 dark:text-red-400 mt-0.5" />
-                    <div className="flex-1">
-                      <Typography variant="subtitle" className="text-red-800 dark:text-red-200 font-medium">
-                        {extensionContextInvalid ? 'Extension Reloaded' : 'Warning'}
+                <Typography variant="body" className="text-red-700 dark:text-red-300">
+                  {initializationError}
                       </Typography>
-                      <Typography variant="caption" className="text-red-700 dark:text-red-300">
-                        {extensionContextInvalid
-                          ? 'The extension was reloaded. Please refresh this page to restore full functionality.'
-                          : `Some features may be limited: ${initializationError}`
-                        }
-                      </Typography>
-                      {extensionContextInvalid && (
-                        <div className="mt-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => window.location.reload()}
-                            className="border-red-300 dark:border-red-600 text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-800 mr-2">
-                            Refresh Page
-                          </Button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  {!extensionContextInvalid && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setInitializationError(null)}
-                      className="border-red-300 dark:border-red-600 text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-800">
-                      Dismiss
-                    </Button>
-                  )}
-                </div>
               </div>
             )}
-
             {/* Status and Settings section */}
             <div className="py-4 px-4 space-y-4 overflow-y-auto flex-shrink-0">
               <ServerStatus status={serverStatus} />
-
-              {/* Settings */}
-              <Card className="sidebar-card border-slate-200 dark:border-slate-700 dark:bg-slate-800 flex-shrink-0 overflow-hidden rounded-lg shadow-sm transition-shadow duration-300">
-                <CardContent className="p-3 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <Typography variant="subtitle" className="text-slate-700 dark:text-slate-300 font-medium">
-                      Push Content Mode
-                    </Typography>
-                    <ToggleWithoutLabel
-                      label="Push Content Mode"
-                      checked={isPushMode}
-                      onChange={handlePushModeToggle}
-                    />
-                  </div>
-                  {/* <div className="flex items-center justify-between">
-                    <Typography variant="subtitle" className="text-slate-700 dark:text-slate-300 font-medium">
-                      Auto Submit Tool Results
-                    </Typography>
-                    <ToggleWithoutLabel
-                      label="Auto Submit Tool Results"
-                      checked={autoSubmit}
-                      onChange={handleAutoSubmitToggle}
-                    />
-                  </div> */}
-
-                  {/* DEBUG BUTTON - ONLY FOR DEVELOPMENT - REMOVE IN PRODUCTION */}
-                  {process.env.NODE_ENV === 'development' && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="w-full mt-2 border-slate-200 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700"
-                      onClick={() => {
-                        const shadowHost = (window as any).activeSidebarManager?.getShadowHost();
-                        if (shadowHost && shadowHost.shadowRoot) {
-                          logMessage('Shadow DOM debug requested');
-                          // Debug functionality removed - use browser dev tools instead
-                        } else {
-                          logMessage('Cannot debug: Shadow DOM not found');
-                        }
-                      }}>
-                      Debug Styles
-                    </Button>
-                  )}
-                </CardContent>
-              </Card>
 
               {/* Tabs for Tools/Instructions */}
               <div className="border-b border-slate-200 dark:border-slate-700 mb-2">
@@ -847,16 +699,6 @@ const Sidebar: React.FC<SidebarProps> = ({ initialPreferences }) => {
                     )}
                     onClick={() => setActiveTab('availableTools')}>
                     Available Tools
-                  </button>
-                  <button
-                    className={cn(
-                      'py-2 px-4 font-medium text-sm transition-all duration-200',
-                      activeTab === 'instructions'
-                        ? 'border-b-2 border-indigo-600 text-indigo-600 dark:border-indigo-400 dark:text-indigo-400'
-                        : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-t-lg',
-                    )}
-                    onClick={() => setActiveTab('instructions')}>
-                    Instructions
                   </button>
                 </div>
               </div>
@@ -881,43 +723,6 @@ const Sidebar: React.FC<SidebarProps> = ({ initialPreferences }) => {
                   </CardContent>
                 </Card>
               </div>
-
-              {/* Instructions */}
-              <div
-                className={cn(
-                  'h-full overflow-y-auto scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-600 scrollbar-track-transparent',
-                  { hidden: activeTab !== 'instructions' },
-                )}>
-                <Card className="border-slate-200 dark:border-slate-700 dark:bg-slate-800 rounded-lg shadow-sm overflow-hidden hover:shadow-md transition-shadow duration-300">
-                  <CardContent className="p-0">
-                    <InstructionManager adapter={adapter} tools={formattedTools} />
-                  </CardContent>
-                </Card>
-              </div>
-            </div>
-
-            {/* Input Area (Always at the bottom) */}
-            <div className="border-t border-slate-200 dark:border-slate-700 flex-shrink-0 bg-white dark:bg-slate-800 shadow-inner">
-              {!isInputMinimized ? (
-                <div className="relative">
-                  <Button variant="ghost" size="sm" onClick={toggleInputMinimize} className="absolute top-2 right-2">
-                    <Icon name="chevron-down" size="sm" />
-                  </Button>
-                  <InputArea
-                    onSubmit={async text => {
-                      await adapter.insertTextIntoInput(text);
-                      await new Promise(resolve => setTimeout(resolve, 300));
-                      await adapter.triggerSubmission();
-                    }}
-                    onToggleMinimize={toggleInputMinimize}
-                  />
-                </div>
-              ) : (
-                <Button variant="default" size="sm" onClick={toggleInputMinimize} className="w-full h-10">
-                  <Icon name="chevron-up" size="sm" className="mr-2" />
-                  Show Input
-                </Button>
-              )}
             </div>
           </div>
         </div>

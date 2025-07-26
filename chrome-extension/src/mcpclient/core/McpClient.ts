@@ -155,15 +155,15 @@ export class McpClient extends EventEmitter<AllEvents> {
       if (type === 'websocket' && 'setDisconnectionCallback' in plugin) {
         (plugin as any).setDisconnectionCallback((reason: string, code?: number, details?: string) => {
           console.log(`[McpClient] WebSocket disconnection detected: ${reason} (code: ${code})`);
-          
+
           // Mark as disconnected immediately
           this.isConnectedFlag = false;
-          
+
           // Emit disconnection event with details
           this.emit('connection:status-changed', {
             isConnected: false,
             type: 'websocket',
-            error: `WebSocket disconnected: ${reason}${code ? ` (code: ${code})` : ''}${details ? ` - ${details}` : ''}`
+            error: `WebSocket disconnected: ${reason}${code ? ` (code: ${code})` : ''}${details ? ` - ${details}` : ''}`,
           });
 
           // Clean up connection state

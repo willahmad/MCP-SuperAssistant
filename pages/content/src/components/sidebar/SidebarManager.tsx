@@ -5,6 +5,7 @@ import { logMessage } from '@src/utils/helpers';
 import Sidebar from './Sidebar';
 import type { UserPreferences } from '@src/types/stores';
 import { useUIStore } from '@src/stores/ui.store';
+import { useEffect } from 'react';
 
 // Helper function to get preferences from Zustand store
 const getZustandPreferences = (): UserPreferences => {
@@ -149,15 +150,15 @@ export class SidebarManager extends BaseSidebarManager {
     // CRITICAL FIX: Always load preferences from Zustand store before showing sidebar
     logMessage('[SidebarManager] Loading preferences from Zustand store before show()');
     try {
-      const userPreferences = getZustandPreferences();
+      // Always set minimized to false (fully expanded)
+      const userPreferences = { ...getZustandPreferences(), isMinimized: false };
       logMessage(`[SidebarManager] Loaded Zustand preferences for show(): ${JSON.stringify(userPreferences)}`);
 
-      // Set the data-initial-minimized attribute based on loaded preferences
+      // Set the data-initial-minimized attribute to false
       await this.initialize(); // Ensure initialized
       if (this.shadowHost) {
-        const wasMinimized = userPreferences.isMinimized ?? false;
-        this.shadowHost.setAttribute('data-initial-minimized', wasMinimized ? 'true' : 'false');
-        logMessage(`[SidebarManager] Set data-initial-minimized to '${wasMinimized ? 'true' : 'false'}'`);
+        this.shadowHost.setAttribute('data-initial-minimized', 'false');
+        logMessage(`[SidebarManager] Set data-initial-minimized to 'false' (always expanded)`);
       }
 
       // CRITICAL FIX: Sync Zustand store with actual visibility state when showing
@@ -181,7 +182,12 @@ export class SidebarManager extends BaseSidebarManager {
     const userPreferences = getZustandPreferences();
     logMessage('[SidebarManager] Creating sidebar content with fresh Zustand preferences');
 
-    return <Sidebar initialPreferences={userPreferences} />;
+    return (
+      <>
+        <Sidebar initialPreferences={userPreferences} />
+        <SidebarMountAnnouncer />
+      </>
+    );
   }
 
   /**
@@ -221,31 +227,18 @@ export class SidebarManager extends BaseSidebarManager {
           window.activeSidebarManager = this;
         }
 
-        // Check if MCP is enabled from persistent state before showing sidebar
-        const zustandState = JSON.parse(localStorage.getItem('mcp-super-assistant-ui-store') || '{}');
-        const mcpEnabled = zustandState.state?.mcpEnabled ?? false;
-        
-        logMessage(`[SidebarManager] MCP enabled from persisted state: ${mcpEnabled}`);
-        
-        if (mcpEnabled) {
-          // MCP is enabled, so show the sidebar
-          logMessage('[SidebarManager] MCP is enabled, showing sidebar');
-          // Initialize with collapsed state to restore preferences including push mode
-          await this.initializeCollapsedStateWithErrorHandling();
-          logMessage('[SidebarManager] Sidebar shown successfully with preferences restored');
-        } else {
-          // MCP is disabled, ensure sidebar is hidden but still initialize for later use
-          logMessage('[SidebarManager] MCP is disabled, initializing sidebar but keeping it hidden');
-          // Initialize without showing the sidebar
-          await this.safeInitialize();
-          // Keep sidebar hidden
-          if (this.shadowHost) {
-            this.shadowHost.style.display = 'none';
-            this.shadowHost.style.opacity = '0';
-            this._isVisible = false;
-          }
-          logMessage('[SidebarManager] Sidebar initialized but kept hidden due to MCP being disabled');
+        // Always initialize sidebar but keep it hidden by default
+        // Don't automatically show sidebar even if MCP was previously enabled
+        logMessage('[SidebarManager] Initializing sidebar but keeping it hidden by default');
+        // Initialize without showing the sidebar
+        await this.safeInitialize();
+        // Keep sidebar hidden
+        if (this.shadowHost) {
+          this.shadowHost.style.display = 'none';
+          this.shadowHost.style.opacity = '0';
+          this._isVisible = false;
         }
+        logMessage('[SidebarManager] Sidebar initialized but kept hidden by default');
       } catch (error) {
         logMessage(
           `[SidebarManager] Error during initialization: ${error instanceof Error ? error.message : String(error)}`,
@@ -286,29 +279,16 @@ export class SidebarManager extends BaseSidebarManager {
     await this.initialize();
 
     try {
-      // Get preferences from Zustand store
-      const preferences = getZustandPreferences();
-      const wasMinimized = preferences.isMinimized ?? false;
-      const isPushMode = preferences.isPushMode ?? false;
+      // Always set minimized to false (fully expanded)
+      const preferences = { ...getZustandPreferences(), isMinimized: false };
       const sidebarWidth = preferences.sidebarWidth || 320;
-
       logMessage(
-        `[SidebarManager] Using Zustand preferences for initialization: minimized=${wasMinimized}, pushMode=${isPushMode}, width=${sidebarWidth}`,
+        `[SidebarManager] Using Zustand preferences for initialization: minimized=false, width=${sidebarWidth}`,
       );
 
       // Set ALL attributes and styles BEFORE making sidebar visible and rendering React
       if (this.shadowHost) {
-        // Set initial state attributes FIRST - this is what React will read
-        if (wasMinimized) {
-          this.shadowHost.setAttribute('data-initial-minimized', 'true');
-          // Force immediate width for minimized state
-          this.shadowHost.style.width = '56px';
-        } else {
-          // Ensure the attribute is explicitly set to false for expanded state
           this.shadowHost.setAttribute('data-initial-minimized', 'false');
-        }
-
-        // Make sidebar visible
         this.shadowHost.style.display = 'block';
         this.shadowHost.style.opacity = '1';
         this.shadowHost.classList.add('initialized');
@@ -319,27 +299,18 @@ export class SidebarManager extends BaseSidebarManager {
       this.syncZustandVisibilityState(true);
 
       // Set push content mode with appropriate width immediately
-      if (isPushMode) {
-        const initialWidth = wasMinimized ? 56 : sidebarWidth;
-        this.setPushContentMode(true, initialWidth, wasMinimized);
-
-        // Verify push mode was applied correctly and retry if needed
-        this.verifyAndRetryPushMode(initialWidth, wasMinimized);
-      }
+      this.setPushContentMode(true, sidebarWidth, false);
+      this.verifyAndRetryPushMode(sidebarWidth, false);
 
       // Render React component with all setup complete
       setTimeout(() => {
-        // CRITICAL FIX: Final verification of window reference before React render
         if (!window.activeSidebarManager || window.activeSidebarManager !== this) {
           logMessage('[SidebarManager] Final check: Re-setting window.activeSidebarManager reference before React render');
           window.activeSidebarManager = this;
         }
-        
         logMessage('[SidebarManager] Rendering React component with all initial state ready');
         this.render();
-
-        // Mark as fully initialized
-        logMessage(`[SidebarManager] Sidebar fully initialized: minimized=${wasMinimized}, pushMode=${isPushMode}`);
+        logMessage(`[SidebarManager] Sidebar fully initialized: minimized=false`);
       }, 20);
     } catch (error) {
       logMessage(
@@ -353,7 +324,6 @@ export class SidebarManager extends BaseSidebarManager {
         this.shadowHost.style.opacity = '1';
         this.shadowHost.classList.add('initialized');
         this._isVisible = true;
-
         this.render();
         logMessage('[SidebarManager] Fallback initialization completed');
       }
@@ -670,4 +640,11 @@ export class SidebarManager extends BaseSidebarManager {
     // Call the parent hide method
     return super.hide();
   }
+}
+
+function SidebarMountAnnouncer() {
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent('mcp:sidebar-mounted'));
+  }, []);
+  return null;
 }

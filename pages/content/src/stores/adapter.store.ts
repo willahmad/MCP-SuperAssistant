@@ -20,7 +20,17 @@ export interface AdapterState {
   setPluginError: (name: string, error: string | Error) => void;
 }
 
-const initialState: Omit<AdapterState, 'registerPlugin' | 'unregisterPlugin' | 'activateAdapter' | 'deactivateAdapter' | 'getPlugin' | 'getActiveAdapter' | 'updatePluginConfig' | 'setPluginError'> = {
+const initialState: Omit<
+  AdapterState,
+  | 'registerPlugin'
+  | 'unregisterPlugin'
+  | 'activateAdapter'
+  | 'deactivateAdapter'
+  | 'getPlugin'
+  | 'getActiveAdapter'
+  | 'updatePluginConfig'
+  | 'setPluginError'
+> = {
   registeredPlugins: {},
   activeAdapterName: null,
   currentCapabilities: [],
@@ -66,7 +76,7 @@ export const useAdapterStore = create<AdapterState>()(
           }
         }
         const { [name]: _, ...remainingPlugins } = get().registeredPlugins;
-        set({ 
+        set({
           registeredPlugins: remainingPlugins,
           activeAdapterName: get().activeAdapterName === name ? null : get().activeAdapterName,
           currentCapabilities: get().activeAdapterName === name ? [] : get().currentCapabilities,
@@ -93,18 +103,35 @@ export const useAdapterStore = create<AdapterState>()(
           try {
             console.log(`[AdapterStore] Deactivating current adapter "${currentActiveAdapter.plugin.name}".`);
             await currentActiveAdapter.instance?.deactivate();
-            eventBus.emit('adapter:deactivated', { pluginName: currentActiveAdapter.plugin.name, reason: 'switching adapter', timestamp: Date.now() });
+            eventBus.emit('adapter:deactivated', {
+              pluginName: currentActiveAdapter.plugin.name,
+              reason: 'switching adapter',
+              timestamp: Date.now(),
+            });
           } catch (e) {
-            console.error(`[AdapterStore] Error deactivating previous adapter "${currentActiveAdapter.plugin.name}":`, e);
+            console.error(
+              `[AdapterStore] Error deactivating previous adapter "${currentActiveAdapter.plugin.name}":`,
+              e,
+            );
             // Continue activation of new adapter despite error in deactivating old one
           }
         }
-        
+
         try {
           // Initialize plugin instance if not already done (lazy initialization)
           if (!pluginReg.instance) {
             // This context would ideally come from a PluginContext provider or be constructed here
-            const pluginContext = { /* ... construct or get PluginContext ... */ eventBus, stores: { /* ... references to other stores ... */ }, utils: { /* ... */ }, chrome, logger: console };
+            const pluginContext = {
+              /* ... construct or get PluginContext ... */ eventBus,
+              stores: {
+                /* ... references to other stores ... */
+              },
+              utils: {
+                /* ... */
+              },
+              chrome,
+              logger: console,
+            };
             await pluginReg.plugin.initialize(pluginContext as any); // Cast as any for now
             pluginReg.instance = pluginReg.plugin;
             pluginReg.status = 'initialized';
@@ -120,7 +147,7 @@ export const useAdapterStore = create<AdapterState>()(
             activeAdapterName: name,
             currentCapabilities: pluginReg.plugin.capabilities,
             lastAdapterError: null, // Clear previous errors on successful activation
-            registeredPlugins: { ...get().registeredPlugins, [name]: pluginReg } // Update registration with instance and status
+            registeredPlugins: { ...get().registeredPlugins, [name]: pluginReg }, // Update registration with instance and status
           });
           console.log(`[AdapterStore] Adapter "${name}" activated with capabilities:`, pluginReg.plugin.capabilities);
           eventBus.emit('adapter:activated', { pluginName: name, timestamp: Date.now() });
@@ -133,7 +160,7 @@ export const useAdapterStore = create<AdapterState>()(
           pluginReg.error = error;
           set({
             lastAdapterError: { name, error },
-            registeredPlugins: { ...get().registeredPlugins, [name]: pluginReg }
+            registeredPlugins: { ...get().registeredPlugins, [name]: pluginReg },
           });
           eventBus.emit('plugin:activation-failed', { name, error });
           eventBus.emit('adapter:error', { name, error });
@@ -153,10 +180,14 @@ export const useAdapterStore = create<AdapterState>()(
           set({
             activeAdapterName: null,
             currentCapabilities: [],
-            registeredPlugins: { ...get().registeredPlugins, [name]: pluginReg }
+            registeredPlugins: { ...get().registeredPlugins, [name]: pluginReg },
           });
           console.log(`[AdapterStore] Adapter "${name}" deactivated. Reason: ${reason || 'user action'}`);
-          eventBus.emit('adapter:deactivated', { pluginName: name, reason: reason || 'user action', timestamp: Date.now() });
+          eventBus.emit('adapter:deactivated', {
+            pluginName: name,
+            reason: reason || 'user action',
+            timestamp: Date.now(),
+          });
         } catch (error: any) {
           const errorMsg = error instanceof Error ? error.message : String(error);
           console.error(`[AdapterStore] Error deactivating adapter "${name}":`, error);
@@ -164,12 +195,12 @@ export const useAdapterStore = create<AdapterState>()(
           pluginReg.error = error;
           set({
             lastAdapterError: { name, error },
-            registeredPlugins: { ...get().registeredPlugins, [name]: pluginReg }
+            registeredPlugins: { ...get().registeredPlugins, [name]: pluginReg },
           });
           eventBus.emit('adapter:error', { name, error });
         }
       },
-      
+
       getPlugin: (name: string): PluginRegistration | undefined => {
         return get().registeredPlugins[name];
       },
@@ -183,8 +214,8 @@ export const useAdapterStore = create<AdapterState>()(
         const pluginReg = get().registeredPlugins[name];
         if (pluginReg) {
           pluginReg.config = { ...pluginReg.config, ...configUpdate };
-          set(state => ({ 
-            registeredPlugins: { ...state.registeredPlugins, [name]: pluginReg }
+          set(state => ({
+            registeredPlugins: { ...state.registeredPlugins, [name]: pluginReg },
           }));
           console.log(`[AdapterStore] Config updated for plugin "${name}":`, pluginReg.config);
           // Potentially re-evaluate active adapter if config change affects it (e.g., enabled status)
@@ -195,23 +226,24 @@ export const useAdapterStore = create<AdapterState>()(
           console.warn(`[AdapterStore] Cannot update config: Plugin "${name}" not found.`);
         }
       },
-      
+
       setPluginError: (name: string, error: string | Error) => {
         const pluginReg = get().registeredPlugins[name];
         if (pluginReg) {
           pluginReg.status = 'error';
           pluginReg.error = error;
-          set(state => ({ 
+          set(state => ({
             registeredPlugins: { ...state.registeredPlugins, [name]: pluginReg },
             lastAdapterError: { name, error },
           }));
-        } else { // Error for a plugin not yet in the store (e.g. registration failure before adding to store)
-           set({ lastAdapterError: { name, error } });
+        } else {
+          // Error for a plugin not yet in the store (e.g. registration failure before adding to store)
+          set({ lastAdapterError: { name, error } });
         }
         console.error(`[AdapterStore] Error set for plugin/adapter "${name}":`, error);
         eventBus.emit('adapter:error', { name, error });
       },
     }),
-    { name: 'AdapterStore', store: 'adapter' }
-  )
+    { name: 'AdapterStore', store: 'adapter' },
+  ),
 );

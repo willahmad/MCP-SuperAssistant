@@ -10,7 +10,7 @@ export class EventEmitter<TEvents = Record<string, any>> {
     }
 
     const eventListeners = this.listeners.get(event)!;
-    
+
     if (eventListeners.size >= this.maxListeners) {
       console.warn(`EventEmitter: Maximum listeners (${this.maxListeners}) exceeded for event '${String(event)}'`);
     }
@@ -31,7 +31,7 @@ export class EventEmitter<TEvents = Record<string, any>> {
   }
 
   once<K extends keyof TEvents>(event: K, listener: EventListener<TEvents[K]>): this {
-    const onceWrapper: EventListener<TEvents[K]> = (data) => {
+    const onceWrapper: EventListener<TEvents[K]> = data => {
       this.off(event, onceWrapper);
       return listener(data);
     };
@@ -45,7 +45,7 @@ export class EventEmitter<TEvents = Record<string, any>> {
     }
 
     // Execute all listeners asynchronously
-    eventListeners.forEach(async (listener) => {
+    eventListeners.forEach(async listener => {
       try {
         await listener(data);
       } catch (error) {

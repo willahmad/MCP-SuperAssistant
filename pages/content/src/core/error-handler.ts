@@ -1,6 +1,6 @@
 /**
  * Global Error Handler
- * 
+ *
  * Centralized error handling and reporting system that integrates with
  * the event bus and circuit breaker pattern.
  */
@@ -60,7 +60,7 @@ class GlobalErrorHandler {
    */
   private setupGlobalHandlers(): void {
     // Handle uncaught exceptions
-    window.addEventListener('error', (event) => {
+    window.addEventListener('error', event => {
       this.handleError(event.error || new Error(event.message), {
         component: 'window',
         operation: 'global-error',
@@ -73,7 +73,7 @@ class GlobalErrorHandler {
     });
 
     // Handle unhandled promise rejections
-    window.addEventListener('unhandledrejection', (event) => {
+    window.addEventListener('unhandledrejection', event => {
       const error = event.reason instanceof Error ? event.reason : new Error(String(event.reason));
       this.handleError(error, {
         component: 'window',
@@ -99,9 +99,8 @@ class GlobalErrorHandler {
     eventBus.on('error:unhandled', ({ error, context }) => {
       try {
         // Add a marker to prevent recursive handling
-        const contextWithMarker = typeof context === 'string'
-          ? { operation: context, fromEventBus: true }
-          : { ...context, fromEventBus: true };
+        const contextWithMarker =
+          typeof context === 'string' ? { operation: context, fromEventBus: true } : { ...context, fromEventBus: true };
         this.handleError(error, contextWithMarker);
       } catch (handlerError) {
         // Prevent recursive error handling by just logging to console
@@ -151,10 +150,12 @@ class GlobalErrorHandler {
 
     // Don't emit error:unhandled event if we're already handling an error from the event bus
     // This prevents recursive loops
-    if (!context.fromEventBus &&
-        context.operation !== 'event-listener-error:unhandled' &&
-        context.operation !== 'once-event-listener-error:unhandled' &&
-        context.operation !== 'wildcard-event-listener') {
+    if (
+      !context.fromEventBus &&
+      context.operation !== 'event-listener-error:unhandled' &&
+      context.operation !== 'once-event-listener-error:unhandled' &&
+      context.operation !== 'wildcard-event-listener'
+    ) {
       // Emit error event
       eventBus.emit('error:unhandled', { error, context });
     }
@@ -242,23 +243,30 @@ class GlobalErrorHandler {
   }
 
   private logError(report: ErrorReport): void {
-    const logMethod = report.severity === 'critical' ? console.error : 
-                     report.severity === 'high' ? console.error :
-                     report.severity === 'medium' ? console.warn : console.log;
+    const logMethod =
+      report.severity === 'critical'
+        ? console.error
+        : report.severity === 'high'
+          ? console.error
+          : report.severity === 'medium'
+            ? console.warn
+            : console.log;
 
     logMethod(
       `[GlobalErrorHandler] ${report.severity.toUpperCase()} Error [${report.id}]:`,
       report.error.message,
-      '\nContext:', report.context,
-      '\nStack:', report.error.stack
+      '\nContext:',
+      report.context,
+      '\nStack:',
+      report.error.stack,
     );
   }
 
   private attemptRecovery(error: Error, context: ErrorContext): void {
     const strategy = this.determineRecoveryStrategy(error, context);
-    
+
     eventBus.emit('error:recovery-attempted', { error, strategy });
-    
+
     switch (strategy) {
       case 'reload-page':
         console.warn('[GlobalErrorHandler] Attempting page reload recovery');
@@ -293,7 +301,7 @@ class GlobalErrorHandler {
   private checkErrorPatterns(error: Error, context: ErrorContext): void {
     const key = `${error.name}:${context.component || 'unknown'}:${context.operation || 'unknown'}`;
     const errorData = this.errorCounts.get(key);
-    
+
     if (errorData && errorData.count >= 5) {
       console.warn(`[GlobalErrorHandler] Error pattern detected: ${key} occurred ${errorData.count} times`);
       eventBus.emit('error:pattern-detected', {

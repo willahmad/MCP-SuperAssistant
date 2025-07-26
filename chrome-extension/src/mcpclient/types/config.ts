@@ -13,6 +13,7 @@ export interface SSEPluginConfig extends PluginConfig {
   connectionTimeout?: number;
   readTimeout?: number;
   headers?: Record<string, string>;
+  uri?: string;
 }
 
 export interface WebSocketPluginConfig extends PluginConfig {
@@ -41,12 +42,13 @@ export interface ConnectionRequest {
 
 export const DEFAULT_CLIENT_CONFIG: ClientConfig = {
   defaultTransport: 'sse',
-  defaultUri: 'http://localhost:3006/sse',
+  defaultUri: 'http://127.0.0.1:8000/mcp',
   plugins: {
     sse: {
       keepAlive: true,
       connectionTimeout: 5000,
       readTimeout: 30000,
+      uri: 'http://127.0.0.1:8000/mcp',
     },
     websocket: {
       protocols: ['mcp-v1'],

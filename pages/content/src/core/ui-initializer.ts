@@ -1,6 +1,6 @@
 /**
  * UI Initialization Example (Session 10)
- * 
+ *
  * Example implementation for popup and options page initialization.
  * This demonstrates how to initialize the core application before rendering React UI.
  */
@@ -13,14 +13,14 @@ import { logMessage } from '../utils/helpers';
 // Simple logger for UI contexts
 class UILogger {
   constructor(private context: string) {}
-  
+
   log(message: string, ...args: any[]): void {
     logMessage(`[${this.context}] ${message}`);
     if (args.length > 0) {
       console.log(...args);
     }
   }
-  
+
   error(message: string, ...args: any[]): void {
     console.error(`[${this.context}] ${message}`, ...args);
   }
@@ -32,12 +32,12 @@ class UILogger {
 export async function initializeUIApplication(
   appComponent: React.ComponentType,
   rootElementId: string = 'root',
-  context: string = 'UI'
+  context: string = 'UI',
 ): Promise<void> {
   const logger = new UILogger(context);
-  
+
   logger.log('UI application initialization started...');
-  
+
   try {
     // Step 1: Initialize core application
     logger.log('Initializing core application...');
@@ -53,21 +53,14 @@ export async function initializeUIApplication(
     // Step 3: Create React root and render
     logger.log('Creating React root and rendering application...');
     const root = ReactDOM.createRoot(rootElement);
-    
-    // Use React.createElement instead of JSX to avoid TypeScript compilation issues
-    root.render(
-      React.createElement(
-        React.StrictMode,
-        null,
-        React.createElement(appComponent)
-      )
-    );
-    
-    logger.log('React UI rendered successfully.');
 
+    // Use React.createElement instead of JSX to avoid TypeScript compilation issues
+    root.render(React.createElement(React.StrictMode, null, React.createElement(appComponent)));
+
+    logger.log('React UI rendered successfully.');
   } catch (error) {
     logger.error('Failed to initialize and render UI application:', error);
-    
+
     // Display an error message in the UI if possible
     const rootElement = document.getElementById(rootElementId);
     if (rootElement) {
@@ -103,7 +96,7 @@ export async function initializeUIApplication(
         </div>
       `;
     }
-    
+
     throw error; // Re-throw for any external error handling
   }
 }

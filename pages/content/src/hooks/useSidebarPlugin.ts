@@ -11,7 +11,9 @@ import type { EventMap } from '../events/event-types';
 export const useSidebarPlugin = () => {
   const [sidebarPlugin, setSidebarPlugin] = useState<SidebarPlugin | null>(null);
   const [isPluginActive, setIsPluginActive] = useState(false);
-  const [pluginStatus, setPluginStatus] = useState<'pending' | 'active' | 'inactive' | 'error' | 'initializing' | 'disabled'>('pending');
+  const [pluginStatus, setPluginStatus] = useState<
+    'pending' | 'active' | 'inactive' | 'error' | 'initializing' | 'disabled'
+  >('pending');
 
   const { isVisible, toggleSidebar: toggleSidebarStore } = useSidebarState();
 
@@ -19,7 +21,7 @@ export const useSidebarPlugin = () => {
   useEffect(() => {
     const plugin = pluginRegistry.getPluginByName('sidebar-plugin') as SidebarPlugin | null;
     setSidebarPlugin(plugin);
-    
+
     if (plugin) {
       setPluginStatus(plugin.getStatus());
       setIsPluginActive(plugin.getStatus() === 'active');
@@ -105,23 +107,23 @@ export const useSidebarPlugin = () => {
     sidebarPlugin,
     isPluginActive,
     pluginStatus,
-    
+
     // Sidebar state from store
     isVisible,
-    
+
     // Actions
     showSidebar,
     hideSidebar,
     toggleSidebar,
     getSidebarManager,
-    
+
     // Plugin management
     activatePlugin,
     deactivatePlugin,
-    
+
     // Utilities
     isPluginAvailable: !!sidebarPlugin,
-    isReady: isPluginActive && !!sidebarPlugin
+    isReady: isPluginActive && !!sidebarPlugin,
   };
 };
 
@@ -138,7 +140,7 @@ export const useSidebarPluginStatus = () => {
     isRegistered: false,
     isActive: false,
     pluginStatus: 'pending',
-    error: null
+    error: null,
   });
 
   // Check initial status function
@@ -150,7 +152,7 @@ export const useSidebarPluginStatus = () => {
       isRegistered,
       isActive: plugin?.getStatus() === 'active',
       pluginStatus: plugin?.getStatus() || 'not-found',
-      error: null
+      error: null,
     });
   }, []);
 
@@ -181,7 +183,7 @@ export const useSidebarPluginStatus = () => {
     if (data.name === 'sidebar-plugin') {
       setStatus(prev => ({
         ...prev,
-        error: typeof data.error === 'string' ? data.error : data.error.message
+        error: typeof data.error === 'string' ? data.error : data.error.message,
       }));
     }
   });
@@ -231,7 +233,7 @@ export const useSidebarPluginManagement = () => {
       status: sidebarPlugin.getStatus(),
       isSupported: sidebarPlugin.isSupported(),
       sidebarManager: sidebarPlugin.getSidebarManager(),
-      isActive: isPluginActive
+      isActive: isPluginActive,
     };
   }, [sidebarPlugin, isPluginActive]);
 
@@ -239,6 +241,6 @@ export const useSidebarPluginManagement = () => {
     registerPlugin,
     unregisterPlugin,
     getPluginInfo,
-    isRegistered: pluginRegistry.isPluginRegistered('sidebar-plugin')
+    isRegistered: pluginRegistry.isPluginRegistered('sidebar-plugin'),
   };
 };

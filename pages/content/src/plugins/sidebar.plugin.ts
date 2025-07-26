@@ -5,7 +5,7 @@ import { useUIStore } from '../stores/ui.store';
 
 /**
  * SidebarPlugin - Manages the sidebar as a plugin in the new architecture
- * 
+ *
  * This plugin:
  * - Automatically shows the sidebar when the page loads
  * - Integrates with Zustand stores and event system
@@ -26,12 +26,12 @@ export class SidebarPlugin implements AdapterPlugin {
 
   async initialize(context: PluginContext): Promise<void> {
     this.context = context;
-    
+
     context.logger.info('[SidebarPlugin] Initializing sidebar plugin...');
-    
+
     // Set up event listeners for sidebar management
     this.setupEventListeners();
-    
+
     context.logger.info('[SidebarPlugin] Sidebar plugin initialized successfully');
   }
 
@@ -46,19 +46,18 @@ export class SidebarPlugin implements AdapterPlugin {
     try {
       // Initialize sidebar manager for current site
       await this.initializeSidebarManager();
-      
+
       // Show sidebar automatically on activation
       await this.showSidebar();
-      
+
       this.isActive = true;
       this.context?.logger.info('[SidebarPlugin] Sidebar plugin activated successfully');
-      
+
       // Emit activation event
       this.context?.eventBus.emit('plugin:activated', {
         pluginName: this.name,
-        timestamp: Date.now()
+        timestamp: Date.now(),
       });
-      
     } catch (error) {
       this.context?.logger.error('[SidebarPlugin] Failed to activate:', error);
       throw error;
@@ -82,7 +81,6 @@ export class SidebarPlugin implements AdapterPlugin {
       this.isShowingSidebar = false;
 
       this.context?.logger.info('[SidebarPlugin] Sidebar plugin deactivated successfully');
-
     } catch (error) {
       this.context?.logger.error('[SidebarPlugin] Error during deactivation:', error);
     }
@@ -118,7 +116,6 @@ export class SidebarPlugin implements AdapterPlugin {
       this.isShowingSidebar = false;
 
       this.context?.logger.info('[SidebarPlugin] Sidebar plugin cleanup completed');
-
     } catch (error) {
       this.context?.logger.error('[SidebarPlugin] Error during cleanup:', error);
     }
@@ -163,7 +160,7 @@ export class SidebarPlugin implements AdapterPlugin {
 
         // Update UI store to reflect sidebar visibility (without emitting event)
         useUIStore.setState(state => ({
-          sidebar: { ...state.sidebar, isVisible: true }
+          sidebar: { ...state.sidebar, isVisible: true },
         }));
 
         this.context?.logger.info('[SidebarPlugin] Sidebar shown successfully');
@@ -190,7 +187,7 @@ export class SidebarPlugin implements AdapterPlugin {
 
       // Update UI store to reflect sidebar visibility (without emitting event)
       useUIStore.setState(state => ({
-        sidebar: { ...state.sidebar, isVisible: false }
+        sidebar: { ...state.sidebar, isVisible: false },
       }));
 
       this.context?.logger.info('[SidebarPlugin] Sidebar hidden successfully');
@@ -225,19 +222,18 @@ export class SidebarPlugin implements AdapterPlugin {
 
     try {
       this.context?.logger.info('[SidebarPlugin] Initializing sidebar manager...');
-      
+
       // Determine site type from current hostname
       const hostname = window.location.hostname;
       const siteType = this.determineSiteType(hostname);
-      
+
       // Create sidebar manager instance
       this.sidebarManager = SidebarManager.getInstance(siteType);
-      
+
       // Expose sidebar manager globally for backward compatibility
       (window as any).activeSidebarManager = this.sidebarManager;
-      
+
       this.context?.logger.info(`[SidebarPlugin] Sidebar manager initialized for site type: ${siteType}`);
-      
     } catch (error) {
       this.context?.logger.error('[SidebarPlugin] Failed to initialize sidebar manager:', error);
       throw error;
@@ -279,7 +275,7 @@ export class SidebarPlugin implements AdapterPlugin {
     });
 
     // Listen for site changes to reinitialize sidebar manager
-    const unsubscribeSiteChange = this.context.eventBus.on('app:site-changed', async (data) => {
+    const unsubscribeSiteChange = this.context.eventBus.on('app:site-changed', async data => {
       this.context?.logger.info(`[SidebarPlugin] Site changed to: ${data.hostname}`);
 
       // Determine if this is actually a different site or just a URL change within the same site
@@ -287,11 +283,15 @@ export class SidebarPlugin implements AdapterPlugin {
       const existingSiteType = this.sidebarManager ? this.determineSiteType(window.location.hostname) : null;
 
       if (existingSiteType && currentSiteType === existingSiteType) {
-        this.context?.logger.info(`[SidebarPlugin] URL changed within same site (${currentSiteType}), preserving sidebar manager`);
+        this.context?.logger.info(
+          `[SidebarPlugin] URL changed within same site (${currentSiteType}), preserving sidebar manager`,
+        );
         return; // Don't destroy and recreate for same site
       }
 
-      this.context?.logger.info(`[SidebarPlugin] Actual site change detected: ${existingSiteType} -> ${currentSiteType}`);
+      this.context?.logger.info(
+        `[SidebarPlugin] Actual site change detected: ${existingSiteType} -> ${currentSiteType}`,
+      );
 
       // Reset showing state
       this.isShowingSidebar = false;
@@ -319,11 +319,13 @@ export class SidebarPlugin implements AdapterPlugin {
 
     // Reinitialize sidebar manager if needed
     if (this.isActive && oldUrl && new URL(url).hostname !== new URL(oldUrl).hostname) {
-      this.initializeSidebarManager().then(() => {
-        this.showSidebar();
-      }).catch(error => {
-        this.context?.logger.error('[SidebarPlugin] Error reinitializing after page change:', error);
-      });
+      this.initializeSidebarManager()
+        .then(() => {
+          this.showSidebar();
+        })
+        .catch(error => {
+          this.context?.logger.error('[SidebarPlugin] Error reinitializing after page change:', error);
+        });
     }
   }
 
@@ -332,11 +334,13 @@ export class SidebarPlugin implements AdapterPlugin {
 
     // Reinitialize sidebar manager for new host
     if (this.isActive) {
-      this.initializeSidebarManager().then(() => {
-        this.showSidebar();
-      }).catch(error => {
-        this.context?.logger.error('[SidebarPlugin] Error reinitializing after host change:', error);
-      });
+      this.initializeSidebarManager()
+        .then(() => {
+          this.showSidebar();
+        })
+        .catch(error => {
+          this.context?.logger.error('[SidebarPlugin] Error reinitializing after host change:', error);
+        });
     }
   }
 }

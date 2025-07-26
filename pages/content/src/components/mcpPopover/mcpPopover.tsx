@@ -1,7 +1,8 @@
 import type React from 'react';
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, useImperativeHandle, forwardRef } from 'react';
 import { createPortal } from 'react-dom';
-import { useCurrentAdapter, useUserPreferences, useMCPState } from '../../hooks';
+import { useCurrentAdapter, useUserPreferences, useMCPState, useConnectionStatus, useAvailableTools, useToolEnablement, useNotifications } from '../../hooks';
+import { useMcpCommunication } from '../../hooks/useMcpCommunication';
 import PopoverPortal from './PopoverPortal';
 import { instructionsState } from '../sidebar/Instructions/InstructionManager';
 import { AutomationService } from '../../services/automation.service';
@@ -542,6 +543,7 @@ interface MCPPopoverProps {
     textClassName?: string;    // Text label class (e.g., 'mcp-gh-button-text')
     iconClassName?: string;    // Icon class (e.g., 'mcp-gh-button-icon')
     activeClassName?: string;  // Active state class (e.g., 'mcp-button-active')
+    style?: React.CSSProperties; // Add style prop
   };
   /**
    * Name of the adapter providing the styling
@@ -619,8 +621,116 @@ const ToggleItem: React.FC<ToggleItemProps> = ({ id, label, checked, disabled, o
   );
 };
 
+export interface ToastContainerHandle {
+  showToast: () => void;
+}
+
+const ToastContainer = forwardRef<ToastContainerHandle, { anchorRef: React.RefObject<HTMLButtonElement> }>(
+  ({ anchorRef }, ref) => {
+    const [visible, setVisible] = useState(false);
+    const [message, setMessage] = useState<string | null>(null);
+    const [isDark, setIsDark] = useState(false);
+    const [fadeState, setFadeState] = useState<'hidden' | 'fading-in' | 'visible' | 'fading-out'>('hidden');
+    const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+    const fadeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+    useEffect(() => {
+      // Detect dark mode
+      const mq = window.matchMedia('(prefers-color-scheme: dark)');
+      setIsDark(mq.matches);
+      const handler = (e: MediaQueryListEvent) => setIsDark(e.matches);
+      mq.addEventListener('change', handler);
+      return () => mq.removeEventListener('change', handler);
+    }, []);
+
+    useImperativeHandle(ref, () => ({
+      showToast: () => {
+        console.log('[Toast] showToast called');
+        setMessage('MCP Tools Updated');
+        setVisible(true);
+        setFadeState('fading-in');
+        if (timeoutRef.current) clearTimeout(timeoutRef.current);
+        if (fadeTimeoutRef.current) clearTimeout(fadeTimeoutRef.current);
+        // Fade in
+        fadeTimeoutRef.current = setTimeout(() => setFadeState('visible'), 20);
+        // Fade out after 4s
+        timeoutRef.current = setTimeout(() => {
+          setFadeState('fading-out');
+          fadeTimeoutRef.current = setTimeout(() => {
+            setVisible(false);
+            setFadeState('hidden');
+            setMessage(null);
+          }, 300); // match transition duration
+        }, 4000);
+      },
+    }));
+
+    if (!message || !visible || !anchorRef.current) return null;
+    const rect = anchorRef.current.getBoundingClientRect();
+    let opacity = 0, translateY = 12;
+    if (fadeState === 'fading-in' || fadeState === 'visible') {
+      opacity = 1;
+      translateY = 0;
+    } else if (fadeState === 'fading-out') {
+      opacity = 0;
+      translateY = 12;
+    }
+    const style: React.CSSProperties = {
+      position: 'fixed',
+      left: rect.left + rect.width / 2,
+      top: rect.bottom + 6,
+      transform: `translateX(-50%) translateY(${translateY}px)`,
+      zIndex: 2147483647, // Ensure toast is always on top
+      minWidth: 160,
+      maxWidth: 240,
+      pointerEvents: 'auto',
+      fontSize: 14,
+      padding: '8px 18px',
+      borderRadius: 6,
+      background: isDark ? '#f3f4f6' : '#fff',
+      border: '2px solid #22c55e',
+      color: isDark ? '#111' : '#111',
+      boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+      opacity, // Fully opaque for legibility
+      transition: 'opacity 0.25s cubic-bezier(.4,0,.2,1), transform 0.25s cubic-bezier(.4,0,.2,1)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      fontWeight: 600,
+      letterSpacing: 0.1,
+      willChange: 'opacity, transform',
+    };
+    return (
+      <div style={style} role="alert">
+        {message}
+      </div>
+    );
+  }
+);
+
+// LEGACY FILE REMOVAL SYSTEM - DISABLED
+// Using new adapter detachFile method instead
+// function removePreviousMcpContextFile() {
+//   // Find all file chips/tabs with the filename 'mcp-tools.txt'
+//   const chips = Array.from(document.querySelectorAll('span[data-mcp-context-file="true"], span')).filter(span => {
+//     return span.textContent && span.textContent.trim() === 'mcp-tools.txt';
+//   });
+//   chips.forEach(span => {
+//     // Find the closest parent that contains the remove button
+//     const chipContainer = span.closest('div');
+//     if (chipContainer) {
+//       const removeBtn = chipContainer.querySelector('button[aria-label="Remove"]');
+//       if (removeBtn) {
+//         (removeBtn as HTMLButtonElement).click();
+//       }
+//     }
+//   });
+// }
+
 export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager, adapterButtonConfig, adapterName }) => {
   const isDarkMode = useThemeDetector();
+  const { status: connectionStatus, isConnected } = useConnectionStatus();
+  const { refreshTools, isConnected: mcpConnected } = useMcpCommunication();
 
   // Use Zustand hooks for adapter and user preferences
   const { plugin: activePlugin, insertText, attachFile, isReady: isAdapterActive } = useCurrentAdapter();
@@ -681,11 +791,11 @@ export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager, adap
   };
   useInjectStyles();
   const [state, setState] = useState<MCPToggleState>(() => {
-    // Initialize state with current MCP state from store
+    // Initialize state with MCP always disabled on page load
     const initialState = toggleStateManager.getState();
     return {
       ...initialState,
-      mcpEnabled: mcpEnabledFromStore // Use the persistent MCP state from store
+      mcpEnabled: false // Always start with MCP disabled
     };
   });
   // Instructions come directly from the global state (managed by Instructions panel in sidebar)
@@ -697,9 +807,10 @@ export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager, adap
   const [isHoverOverlayVisible, setIsHoverOverlayVisible] = useState(false);
   const [hoverOverlayPosition, setHoverOverlayPosition] = useState({ x: 0, y: 0 });
   const popoverRef = useRef<HTMLDivElement>(null);
-  const buttonRef = useRef<HTMLButtonElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null) as React.RefObject<HTMLButtonElement>;
   const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const hoverOverlayRef = useRef<HTMLDivElement>(null);
+  const toastRef = useRef<ToastContainerHandle>(null);
 
   // Update state from manager
   const updateState = useCallback(() => {
@@ -710,17 +821,22 @@ export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager, adap
     }));
   }, [toggleStateManager, mcpEnabledFromStore]);
 
-  // Sync state when MCP state changes from store (e.g., from other UI components or on page load)
+  // Sync state when MCP state changes from store (e.g., from other UI components)
+  // But don't sync on initial page load - always start disabled
   useEffect(() => {
-    console.log(`[MCPPopover] MCP state changed to: ${mcpEnabledFromStore}, updating MCP toggle UI`);
-    setState(prevState => {
-      const newState = {
-        ...prevState,
-        mcpEnabled: mcpEnabledFromStore
-      };
-      console.log(`[MCPPopover] State updated:`, newState);
-      return newState;
-    });
+    // Only sync if this is not the initial load (when mcpEnabledFromStore might be true from persistence)
+    // We want to start disabled on every page load
+    if (mcpEnabledFromStore !== undefined) {
+      console.log(`[MCPPopover] MCP state changed to: ${mcpEnabledFromStore}, updating MCP toggle UI`);
+      setState(prevState => {
+        const newState = {
+          ...prevState,
+          mcpEnabled: mcpEnabledFromStore
+        };
+        console.log(`[MCPPopover] State updated:`, newState);
+        return newState;
+      });
+    }
   }, [mcpEnabledFromStore]);
 
   // Subscribe to global instructions state changes (Instructions panel is source of truth)
@@ -739,82 +855,62 @@ export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager, adap
     };
   }, []);
 
-  // Initialize and sync popover state with persistent MCP state from store
-  useEffect(() => {
-    // Force initial state sync to ensure popover reflects current persistent MCP state
-    const currentToggleState = toggleStateManager.getState();
-    console.log(`[MCPPopover] Initial state sync - toggleManager: ${currentToggleState.mcpEnabled}, store MCP: ${mcpEnabledFromStore}`);
-    
-    // Sync automation state from user preferences
-    const syncedState = {
-      ...currentToggleState,
-      mcpEnabled: mcpEnabledFromStore, // Always prioritize persistent MCP state from store
-      autoInsert: preferences.autoInsert || false,
-      autoSubmit: preferences.autoSubmit || false,
-      autoExecute: preferences.autoExecute || false,
-    };
-    
-    setState(syncedState);
-    
-    // Also sync the legacy toggle state manager
-    toggleStateManager.setAutoInsert(preferences.autoInsert || false);
-    toggleStateManager.setAutoSubmit(preferences.autoSubmit || false);
-    toggleStateManager.setAutoExecute(preferences.autoExecute || false);
-  }, [toggleStateManager, mcpEnabledFromStore, preferences.autoInsert, preferences.autoSubmit, preferences.autoExecute]); // Include dependencies
+  // Initialize and sync popover state - always start with MCP disabled
+  // useEffect(() => {
+  //   // Force MCP to start disabled on every page load
+  //   const currentToggleState = toggleStateManager.getState();
+  //   console.log(`[MCPPopover] Initial state sync - forcing MCP to start disabled`);
+  //   // Reset MCP state in store to disabled
+  //   setMCPEnabled(false, 'page-load-reset', false);
+  //   // Sync automation state from user preferences
+  //   const syncedState = {
+  //     ...currentToggleState,
+  //     mcpEnabled: false, // Always start disabled
+  //     autoInsert: preferences.autoInsert || false,
+  //     autoSubmit: preferences.autoSubmit || false,
+  //     autoExecute: preferences.autoExecute || false,
+  //   };
+  //   setState(syncedState);
+  //   // Also sync the legacy toggle state manager
+  //   toggleStateManager.setAutoInsert(preferences.autoInsert || false);
+  //   toggleStateManager.setAutoSubmit(preferences.autoSubmit || false);
+  //   toggleStateManager.setAutoExecute(preferences.autoExecute || false);
+  // }, [toggleStateManager, preferences.autoInsert, preferences.autoSubmit, preferences.autoExecute]); // Remove mcpEnabledFromStore dependency
 
   // Handlers for toggles
-  const handleMCP = (checked: boolean) => {
+  const handleMCP = async (checked: boolean) => {
     console.log(`[MCPPopover] MCP toggle changed to: ${checked}`);
-    
-    // Update the persistent MCP state in store (this will automatically control sidebar visibility)
-    setMCPEnabled(checked, 'mcp-popover-user-toggle');
-    
-    // Also inform the legacy toggle state manager for compatibility
+    setMCPEnabled(checked, 'mcp-popover-user-toggle', checked); // Show sidebar when enabling MCP
     toggleStateManager.setMCPEnabled(checked);
-    
     // State will be updated automatically through the MCP state effect
-  };
 
-  const handleAutoInsert = (checked: boolean) => {
-    console.log(`[MCPPopover] Auto Insert toggle changed to: ${checked}`);
-    
-    // Update user preferences store
-    updatePreferences({ autoInsert: checked });
-    
-    // Also update legacy toggle state manager for compatibility
-    toggleStateManager.setAutoInsert(checked);
-    updateState();
-    
-    // Update automation state on window for render_prescript access
-    AutomationService.getInstance().updateAutomationStateOnWindow().catch(console.error);
-  };
-
-  const handleAutoSubmit = (checked: boolean) => {
-    console.log(`[MCPPopover] Auto Submit toggle changed to: ${checked}`);
-    
-    // Update user preferences store
-    updatePreferences({ autoSubmit: checked });
-    
-    // Also update legacy toggle state manager for compatibility
-    toggleStateManager.setAutoSubmit(checked);
-    updateState();
-    
-    // Update automation state on window for render_prescript access
-    AutomationService.getInstance().updateAutomationStateOnWindow().catch(console.error);
-  };
-
-  const handleAutoExecute = (checked: boolean) => {
-    console.log(`[MCPPopover] Auto Execute toggle changed to: ${checked}`);
-    
-    // Update user preferences store
-    updatePreferences({ autoExecute: checked });
-    
-    // Also update legacy toggle state manager for compatibility
-    toggleStateManager.setAutoExecute(checked);
-    updateState();
-    
-    // Update automation state on window for render_prescript access
-    AutomationService.getInstance().updateAutomationStateOnWindow().catch(console.error);
+    // Only perform auto-insert/attach when enabling MCP
+    if (checked) {
+      const context = instructionsState.instructions || '';
+      if (!context.trim()) {
+        console.warn('[MCPPopover] No context to attach.');
+        return;
+      }
+      // Always attach as file
+      if (isAdapterActive && activePlugin && attachFile && activePlugin.capabilities.includes('file-attachment')) {
+        const isPerplexity = activePlugin.name === 'Perplexity';
+        const isGemini = activePlugin.name === 'Gemini';
+        const fileType = isPerplexity || isGemini ? 'text/plain' : 'text/markdown';
+        const fileExtension = isPerplexity || isGemini ? '.txt' : '.md';
+        const fileName = `mcp_superassistant_instructions${fileExtension}`;
+        const file = new File([context], fileName, { type: fileType });
+        try {
+          const success = await attachFile(file);
+          if (!success) {
+            console.warn('[MCPPopover] Auto-attach failed.');
+          }
+        } catch (e) {
+          console.error('[MCPPopover] Error during auto-attach:', e);
+        }
+      } else {
+        console.warn('[MCPPopover] Adapter not ready or does not support file attachment.');
+      }
+    }
   };
 
   // Action buttons
@@ -1062,14 +1158,15 @@ export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager, adap
   }, []);
 
   // Derived disabled states
-  const autoInsertDisabled = !state.mcpEnabled;
-  const autoSubmitDisabled = !state.mcpEnabled || !state.autoInsert;
   const autoExecuteDisabled = !state.mcpEnabled;
 
-  // Determine button styling based on adapter configuration
-  const buttonClassName = adapterButtonConfig?.className
-    ? `${adapterButtonConfig.className}${state.mcpEnabled && adapterButtonConfig.activeClassName ? ` ${adapterButtonConfig.activeClassName}` : ''}`
-    : `mcp-main-button${state.mcpEnabled ? '' : ' inactive'}`;
+  // Determine button styling based on adapter configuration and connection status
+  let buttonClassName = adapterButtonConfig?.className
+    ? `${adapterButtonConfig.className}${state.mcpEnabled && isConnected && adapterButtonConfig.activeClassName ? ` ${adapterButtonConfig.activeClassName}` : ''}`
+    : `mcp-main-button${state.mcpEnabled && isConnected ? '' : ' inactive'}`;
+  
+  // Add red border only for disconnected state
+  if (!isConnected) buttonClassName += ' mcp-disconnected';
 
   const buttonContent = adapterButtonConfig?.contentClassName ? (
     <span className={adapterButtonConfig.contentClassName}>
@@ -1092,261 +1189,308 @@ export const MCPPopover: React.FC<MCPPopoverProps> = ({ toggleStateManager, adap
     </>
   );
 
-  return (
-    <div className="mcp-popover-container" id="mcp-popover-container" ref={containerRef}>
-      <div 
-        style={{ position: 'relative', display: 'inline-block' }}
-        onMouseEnter={handleMouseEnter}
-        onMouseLeave={handleMouseLeave}
-      >
-        <button
-          className={buttonClassName}
-          aria-label={`MCP Settings - ${state.mcpEnabled ? 'Active' : 'Inactive'}`}
-          title={`MCP Settings - ${state.mcpEnabled ? 'Sidebar Visible' : 'Sidebar Hidden'}`}
-          type="button"
-          ref={buttonRef}
-          onClick={() => setIsPopoverOpen(!isPopoverOpen)}>
-          {buttonContent}
-        </button>
-      </div>
+  // Add red border style for disconnected state (very specific selector)
+  useInjectStyles();
+  useEffect(() => {
+    if (!document.getElementById('mcp-disconnected-style')) {
+      const styleEl = document.createElement('style');
+      styleEl.id = 'mcp-disconnected-style';
+      styleEl.textContent = `button.mcp-disconnected, .mcp-disconnected { border: 2px solid #e53935 !important; box-shadow: 0 0 0 2px #e5393533 !important; }`;
+      document.head.appendChild(styleEl);
+    }
+  }, []);
+
+  // Get available tools at component level (hooks can't be called in event handlers)
+  const { tools } = useAvailableTools();
+  const { enableAllTools, disableAllTools, loadToolEnablementState } = useToolEnablement();
+
+  // On click: handle different states
+  const handleButtonClick = async () => {
+    if (!isConnected) {
+      // Disconnected state: toggle sidebar (open if closed, close if open)
+      if (window.activeSidebarManager && typeof window.activeSidebarManager.getIsVisible === 'function') {
+        if (window.activeSidebarManager.getIsVisible()) {
+          // Sidebar is open, so close it
+          if (typeof window.activeSidebarManager.hide === 'function') {
+            window.activeSidebarManager.hide();
+          }
+        } else {
+          // Sidebar is closed, so open it and focus ServerStatus
+          window.activeSidebarManager.show();
+          window.dispatchEvent(new CustomEvent('mcp:focus-server-status'));
+          // Wait for sidebar to be mounted before opening server settings
+          const openSettings = () => {
+            window.dispatchEvent(new CustomEvent('mcp:open-server-settings'));
+            window.removeEventListener('mcp:sidebar-mounted', openSettings);
+          };
+          window.addEventListener('mcp:sidebar-mounted', openSettings);
+        }
+      }
+      return;
+    }
+    if (state.mcpEnabled) {
+      // If MCP is enabled, disable MCP and all tools
+      setMCPEnabled(false, 'mcp-popover', false);
+      disableAllTools();
+      await loadToolEnablementState();
+      // Remove the attached context file when disabling MCP using new adapter system
+      // removePreviousMcpContextFile(); // LEGACY - DISABLED
+      if (activePlugin && (activePlugin as any).detachFile) {
+        try {
+          await (activePlugin as any).detachFile('mcp-tools.txt');
+          console.log('[MCPPopover] MCP disabled, all tools disabled, and context file removed via new adapter');
+        } catch (error) {
+          console.warn('[MCPPopover] Failed to remove context file via new adapter:', error);
+        }
+      } else {
+        console.log('[MCPPopover] MCP disabled, all tools disabled (no adapter detachFile method available)');
+      }
       
-      {/* Hover overlay portal */}
-      {isHoverOverlayVisible && createPortal(
-        <div 
-          className={`mcp-hover-overlay ${isHoverOverlayVisible ? 'visible' : ''}`}
-          ref={hoverOverlayRef}
-          onMouseEnter={handleHoverOverlayEnter}
-          onMouseLeave={handleHoverOverlayLeave}
-          style={{
-            left: `${hoverOverlayPosition.x}px`,
-            top: `${hoverOverlayPosition.y}px`,
-          }}
+      // Reset attachment tracking when MCP is disabled
+      attachmentRef.current = null;
+      console.log('[MCPPopover] Reset attachment tracking');
+    } else {
+      // Connected state (normal state): enable MCP functionality
+      console.log('[MCPPopover] Enabling MCP functionality...');
+      // Enable MCP in the store and show sidebar
+      setMCPEnabled(true, 'mcp-popover', true);
+      // Enable all tools and save state
+      enableAllTools();
+      await loadToolEnablementState();
+      // Fetch tools and add them to chat context
+      if (activePlugin && attachFile) {
+        if (tools && tools.length > 0) {
+          // Import the instruction generator to get the system context
+          const { generateInstructions } = await import('../sidebar/Instructions/instructionGenerator');
+          
+          // Generate the complete context with system instructions prepended
+          // Ensure all tools have the required fields for generateInstructions
+          const toolsWithSchema = tools.map((tool: any) => ({
+            name: tool.name,
+            description: tool.description || '',
+            schema: tool.schema || '{}'
+          }));
+          const systemContext = generateInstructions(toolsWithSchema, undefined, false);
+          const toolsDescription = tools.map((tool: any) => 
+            `- ${tool.name}: ${tool.description}`
+          ).join('\n');
+          const toolsContext = `Available MCP Tools:\n${toolsDescription}`;
+          
+          // Combine system context and tools context
+          const completeContext = `${systemContext}\n\n${toolsContext}`;
+          
+          // Check if we've already attached this exact context recently (within 2 seconds)
+          const now = Date.now();
+          if (attachmentRef.current && 
+              attachmentRef.current.context === completeContext && 
+              now - attachmentRef.current.timestamp < 2000) {
+            console.log('[MCPPopover] Skipping duplicate file attachment in handleButtonClick');
+            return;
+          }
+          
+          // removePreviousMcpContextFile(); // LEGACY - DISABLED
+          const blob = new Blob([completeContext], { type: 'text/plain' });
+          const file = new File([blob], 'mcp-tools.txt', { type: 'text/plain' });
+          attachFile(file);
+          
+          // Track this attachment
+          attachmentRef.current = { timestamp: now, context: completeContext };
+          console.log(`[MCPPopover] Attached complete context (system + ${tools.length} tools) as file and tracked attachment`);
+        } else {
+          console.log('[MCPPopover] No tools available from MCP server');
+        }
+      } else {
+        console.log('[MCPPopover] No active plugin or attachFile function available');
+      }
+    }
+  };
+
+  // Auto-refresh tool list every 10 seconds if MCP is connected
+  // DISABLED FOR TESTING - REMOVE THIS COMMENT TO RE-ENABLE
+  /*
+  useEffect(() => {
+    if (!mcpConnected) return;
+    let interval: NodeJS.Timeout | null = setInterval(async () => {
+      try {
+        await refreshTools(true);
+        toastRef.current?.showToast();
+      } catch (e) {
+        // Optionally log error
+      }
+    }, 10000);
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [mcpConnected, refreshTools]);
+  */
+
+  // Helper function to replace existing tool context instead of adding to it
+  const replaceToolContext = useCallback(async (newContext: string) => {
+    if (!isAdapterActive || !activePlugin || !insertText) return;
+
+    try {
+      // Find the current input element
+      const targetElement = document.activeElement as HTMLElement;
+      if (!targetElement) return;
+
+      let currentContent = '';
+      if (targetElement.tagName === 'TEXTAREA') {
+        currentContent = (targetElement as HTMLTextAreaElement).value;
+      } else if (targetElement.getAttribute('contenteditable') === 'true') {
+        currentContent = targetElement.textContent || '';
+      } else {
+        currentContent = targetElement.textContent || '';
+      }
+
+      // Check if there's existing tool context to replace
+      const toolContextPattern = /Available MCP Tools:[\s\S]*?(?=\n\n|$)/;
+      const hasExistingContext = toolContextPattern.test(currentContent);
+
+      if (hasExistingContext) {
+        // Replace existing tool context
+        const newContent = currentContent.replace(toolContextPattern, newContext);
+        
+        // Clear and re-insert the entire content
+        if (targetElement.tagName === 'TEXTAREA') {
+          (targetElement as HTMLTextAreaElement).value = newContent;
+          targetElement.dispatchEvent(new InputEvent('input', { bubbles: true }));
+        } else if (targetElement.getAttribute('contenteditable') === 'true') {
+          targetElement.textContent = newContent;
+          targetElement.dispatchEvent(new InputEvent('input', { bubbles: true }));
+        }
+      } else {
+        // No existing context, just append normally
+        await insertText(newContext);
+      }
+    } catch (error) {
+      console.error('[MCPPopover] Error replacing tool context:', error);
+      // Fallback to normal insert
+      await insertText(newContext);
+    }
+  }, [isAdapterActive, activePlugin, insertText]);
+
+  // Track if we've already attached a file in this session to prevent duplicates
+  const attachmentRef = useRef<{ timestamp: number; context: string } | null>(null);
+  
+  // Effect: When tools change and MCP is enabled, refresh chat context and show toast
+  const { addNotification } = useNotifications();
+  useEffect(() => {
+    if (!state.mcpEnabled) return;
+    if (!tools || tools.length === 0) return;
+    
+    // Import the instruction generator to get the system context
+    import('../sidebar/Instructions/instructionGenerator').then(({ generateInstructions }) => {
+      // Ensure all tools have the required fields for generateInstructions
+      const toolsWithSchema = tools.map((tool: any) => ({
+        name: tool.name,
+        description: tool.description || '',
+        schema: tool.schema || '{}'
+      }));
+      
+      // Generate the complete context with system instructions prepended
+      const systemContext = generateInstructions(toolsWithSchema, undefined, false);
+      const toolsDescription = tools.map((tool: any) => `- ${tool.name}: ${tool.description}`).join('\n');
+      const toolsContext = `Available MCP Tools:\n${toolsDescription}`;
+      
+      // Combine system context and tools context
+      const completeContext = `${systemContext}\n\n${toolsContext}`;
+      
+      // Check if we've already attached this exact context recently (within 2 seconds)
+      const now = Date.now();
+      if (attachmentRef.current && 
+          attachmentRef.current.context === completeContext && 
+          now - attachmentRef.current.timestamp < 2000) {
+        console.log('[MCPPopover] Skipping duplicate file attachment (same context within 2s)');
+        return;
+      }
+      
+      if (attachFile) {
+        // removePreviousMcpContextFile(); // LEGACY - DISABLED
+        const blob = new Blob([completeContext], { type: 'text/plain' });
+        const file = new File([blob], 'mcp-tools.txt', { type: 'text/plain' });
+        attachFile(file);
+        
+        // Track this attachment
+        attachmentRef.current = { timestamp: now, context: completeContext };
+        console.log('[MCPPopover] Attached file and tracked attachment');
+      }
+      // Show toast notification
+      toastRef.current?.showToast();
+    }).catch(error => {
+      console.error('[MCPPopover] Error importing instruction generator:', error);
+      // Fallback to original behavior
+      const toolsDescription = tools.map((tool: any) => `- ${tool.name}: ${tool.description}`).join('\n');
+      const contextMessage = `Available MCP Tools:\n${toolsDescription}`;
+      
+      // Check for duplicate in fallback too
+      const now = Date.now();
+      if (attachmentRef.current && 
+          attachmentRef.current.context === contextMessage && 
+          now - attachmentRef.current.timestamp < 2000) {
+        console.log('[MCPPopover] Skipping duplicate file attachment in fallback');
+        return;
+      }
+      
+      if (attachFile) {
+        // removePreviousMcpContextFile(); // LEGACY - DISABLED
+        const blob = new Blob([contextMessage], { type: 'text/plain' });
+        const file = new File([blob], 'mcp-tools.txt', { type: 'text/plain' });
+        attachFile(file);
+        
+        // Track this attachment
+        attachmentRef.current = { timestamp: now, context: contextMessage };
+        console.log('[MCPPopover] Attached file in fallback and tracked attachment');
+      }
+      toastRef.current?.showToast();
+    });
+  }, [tools, state.mcpEnabled]);
+
+  // When creating the file for attachFile, add a unique marker to the file (if possible)
+  // Since File objects can't have custom properties, we need to ensure the UI element (e.g., link/span) created for the file gets the marker.
+  // If attachFile returns a reference or creates a DOM element, add the marker there. Otherwise, after attaching, find the element by filename and add the marker.
+  // After attachFile(file):
+  setTimeout(() => {
+    // Try to find the file attachment element by filename and add the marker
+    const fileLinks = Array.from(document.querySelectorAll('a, span, div')).filter(el => el.textContent && el.textContent.includes('mcp-tools.txt'));
+    fileLinks.forEach(el => el.setAttribute('data-mcp-context-file', 'true'));
+  }, 500);
+
+  // MCP button with different states
+  return (
+    <>
+        <button
+        ref={buttonRef}
+          className={buttonClassName}
+        aria-label={isConnected ? "MCP SuperAssistant (Use extension icon to toggle sidebar)" : "MCP server disconnected. Click to open settings."}
+        title={isConnected ? "MCP SuperAssistant - Use the extension icon to toggle the sidebar" : "MCP server disconnected. Click to open settings."}
+          type="button"
+        onClick={handleButtonClick}
+          style={{ position: 'relative', ...adapterButtonConfig?.style }}
         >
-          <button
-            className="mcp-hover-button"
-            onClick={handleInsert}
-            title="Insert instructions"
-            type="button"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={{ flexShrink: 0 }}>
-              <path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
-            </svg>
-            Insert
-          </button>
-          <button
-            className="mcp-hover-button"
-            onClick={handleAttach}
-            title="Attach instructions as file"
-            type="button"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={{ flexShrink: 0 }}>
-              <path d="M16.5 6v11.5c0 2.21-1.79 4-4 4s-4-1.79-4-4V5c0-1.38 1.12-2.5 2.5-2.5s2.5 1.12 2.5 2.5v10.5c0 .55-.45 1-1 1s-1-.45-1-1V6H10v9.5c0 1.38 1.12 2.5 2.5 2.5s2.5-1.12 2.5-2.5V5c0-2.21-1.79-4-4-4S7 2.79 7 5v12.5c0 3.04 2.46 5.5 5.5 5.5s5.5-2.46 5.5-5.5V6h-1.5z"/>
-            </svg>
-            Attach
-          </button>
-          <button
-            className="mcp-hover-button"
-            onClick={() => setIsPopoverOpen(!isPopoverOpen)}
-            title="Configure MCP settings"
-            type="button"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={{ flexShrink: 0 }}>
-              <path d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.07-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61 l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81c-0.04-0.24-0.24-0.41-0.48-0.41 h-3.84c-0.24,0-0.43,0.17-0.47,0.41L9.25,5.35C8.66,5.59,8.12,5.92,7.63,6.29L5.24,5.33c-0.22-0.08-0.47,0-0.59,0.22L2.74,8.87 C2.62,9.08,2.66,9.34,2.86,9.48l2.03,1.58C4.84,11.36,4.82,11.69,4.82,12s0.02,0.64,0.07,0.94l-2.03,1.58 c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54 c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96 c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.47-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6 s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"/>
-            </svg>
-            Configure
-          </button>
-        </div>,
-        document.body
-      )}
-      <PopoverPortal isOpen={isPopoverOpen} triggerRef={buttonRef}>
-        <div
-          className="mcp-popover position-above"
-          ref={popoverRef}
-          style={{
-            display: 'flex',
-            flexDirection: 'row',
-            minHeight: 280,
-            padding: 0,
-            width: '650px',
-            position: 'relative',
-            borderRadius: '16px',
-            boxShadow: theme.boxShadow,
-            overflow: 'hidden',
-            backgroundColor: theme.mainBackground,
-            border: `1px solid ${theme.borderColor}`,
-          }}>
-          <button
-            className="mcp-close-button"
-            onClick={() => setIsPopoverOpen(false)}
-            aria-label="Close"
-            title="Close"
-            type="button"
-            style={{
-              color: theme.secondaryText,
-            }}>
-            ✕
-          </button>
-          {/* Toggles column */}
-          <div
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              width: 160,
-              padding: '20px 12px',
-              gap: 12,
-              borderRight: `1px solid ${theme.dividerColor}`,
-              background: theme.mainBackground,
-              boxSizing: 'border-box',
-            }}>
-            <ToggleItem id="mcp-toggle" label="MCP" checked={state.mcpEnabled} disabled={false} onChange={handleMCP} />
-            <ToggleItem
-              id="auto-insert-toggle"
-              label="Auto Insert"
-              checked={state.autoInsert}
-              disabled={autoInsertDisabled}
-              onChange={handleAutoInsert}
-            />
-            <ToggleItem
-              id="auto-submit-toggle"
-              label="Auto Submit"
-              checked={state.autoSubmit}
-              disabled={autoSubmitDisabled}
-              onChange={handleAutoSubmit}
-            />
-            <ToggleItem
-              id="auto-execute-toggle"
-              label="Auto Execute"
-              checked={state.autoExecute}
-              disabled={autoExecuteDisabled}
-              onChange={handleAutoExecute}
-            />
-          </div>
-          {/* Instruction panel column */}
-          <div
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              flex: 1,
-              padding: '20px 20px 16px 20px',
-              background: theme.mainBackground,
-              boxSizing: 'border-box',
-              overflow: 'auto',
-            }}>
-            <div
+          {buttonContent}
+          {/* Render unplugged icon only in normal state (not blue, not red) */}
+          {!state.mcpEnabled && isConnected && (
+            <img
+              src={chrome.runtime.getURL('unplugged-icon.svg')}
+              alt="Unplugged"
+              width={16}
+              height={16}
               style={{
-                fontWeight: '600',
-                fontSize: 16,
-                marginBottom: 16,
-                letterSpacing: 0.5,
-                color: theme.primaryText,
-                paddingBottom: 4,
-                borderBottom: `1px solid ${theme.dividerColor}`,
-              }}>
-              Instructions
-            </div>
-            <div
-              className="mcp-instructions-container"
-              style={{
-                flex: 1,
-                minHeight: 180,
-                maxHeight: 320,
-                overflowY: 'auto',
-                overflowX: 'auto',
-                margin: '0 0 20px 0',
-                whiteSpace: 'pre-wrap',
-                width: '100%',
-                boxSizing: 'border-box',
-                backgroundColor: theme.secondaryBackground,
-                color: theme.primaryText,
-                border: `1px solid ${theme.borderColor}`,
-                boxShadow: theme.innerShadow,
-              }}>
-              {instructions || (
-                <div style={{ 
-                  color: theme.secondaryText, 
-                  fontStyle: 'italic',
-                  padding: '10px',
-                  textAlign: 'center' 
-                }}>
-                  {!instructionsState.instructions 
-                    ? 'Loading instructions...' 
-                    : 'Generating instructions...'
-                  }
-                </div>
-              )}
-            </div>
-            <div
-              style={{
-                display: 'flex',
-                gap: 20,
-                justifyContent: 'space-between',
-                width: '100%',
-                marginTop: 0,
-                marginBottom: 16,
-                paddingRight: 16,
-              }}>
-              <button
-                className="mcp-instruction-btn"
-                style={{
-                  flex: 1,
-                  padding: '12px 0',
-                  fontSize: 14,
-                  fontWeight: 500,
-                  borderRadius: 8,
-                  border: `1px solid ${theme.borderColor}`,
-                  background: theme.secondaryBackground,
-                  cursor: 'pointer',
-                  color: theme.primaryText,
-                }}
-                onClick={handleCopy}
-                onMouseEnter={e => (e.currentTarget.style.background = theme.buttonBackground)}
-                onMouseLeave={e => (e.currentTarget.style.background = theme.secondaryBackground)}
-                type="button">
-                {copyStatus}
-              </button>
-              <button
-                className="mcp-instruction-btn"
-                style={{
-                  flex: 1,
-                  padding: '12px 0',
-                  fontSize: 14,
-                  fontWeight: 500,
-                  borderRadius: 8,
-                  border: `1px solid ${theme.borderColor}`,
-                  background: theme.secondaryBackground,
-                  cursor: 'pointer',
-                  color: theme.primaryText,
-                }}
-                onClick={handleInsert}
-                onMouseEnter={e => (e.currentTarget.style.background = theme.buttonBackground)}
-                onMouseLeave={e => (e.currentTarget.style.background = theme.secondaryBackground)}
-                type="button">
-                {insertStatus}
-              </button>
-              <button
-                className="mcp-instruction-btn"
-                style={{
-                  flex: 1,
-                  padding: '12px 0',
-                  fontSize: 14,
-                  fontWeight: 500,
-                  borderRadius: 8,
-                  border: `1px solid ${theme.borderColor}`,
-                  background: theme.secondaryBackground,
-                  cursor: 'pointer',
-                  color: theme.primaryText,
-                }}
-                onClick={handleAttach}
-                onMouseEnter={e => (e.currentTarget.style.background = theme.buttonBackground)}
-                onMouseLeave={e => (e.currentTarget.style.background = theme.secondaryBackground)}
-                type="button">
-                {attachStatus}
-              </button>
-            </div>
-          </div>
-        </div>
-      </PopoverPortal>
-    </div>
+                position: 'absolute',
+                bottom: 4,
+                right: 4,
+                zIndex: 9999,
+                pointerEvents: 'none',
+                userSelect: 'none',
+                display: 'block',
+              }}
+              draggable={false}
+              onError={e => { e.currentTarget.style.display = 'none'; }}
+            />
+          )}
+        </button>
+      <ToastContainer ref={toastRef} anchorRef={buttonRef} />
+    </>
   );
 };
 

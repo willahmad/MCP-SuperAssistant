@@ -96,15 +96,6 @@ Answer the user\'s request using the relevant tool(s), if they are available. Ch
 
 <Output Format>
 <Start HERE>
-## Thoughts
-  - User Query Elaboration:
-  - Thoughts:
-  - Observations:
-  - Solutions:
-  - Function to be used:
-  - call_id: $CALL_ID + 1 = $CALL_ID
-
-
 \`\`\`xml
 <function_calls>
 <invoke name="$FUNCTION_NAME" call_id="$CALL_ID">

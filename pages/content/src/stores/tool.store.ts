@@ -13,7 +13,7 @@ export interface ToolState {
   // New: Tool enablement state
   enabledTools: Set<string>; // Set of enabled tool names
   isLoadingEnablement: boolean; // Loading state for tool enablement
-  
+
   // Actions
   setAvailableTools: (tools: Tool[]) => void;
   addDetectedTool: (tool: DetectedTool) => void;
@@ -31,7 +31,22 @@ export interface ToolState {
   loadToolEnablementState: () => Promise<void>;
 }
 
-const initialState: Omit<ToolState, 'setAvailableTools' | 'addDetectedTool' | 'clearDetectedTools' | 'startToolExecution' | 'updateToolExecution' | 'completeToolExecution' | 'getToolExecution' | 'enableTool' | 'disableTool' | 'enableAllTools' | 'disableAllTools' | 'isToolEnabled' | 'loadToolEnablementState'> = {
+const initialState: Omit<
+  ToolState,
+  | 'setAvailableTools'
+  | 'addDetectedTool'
+  | 'clearDetectedTools'
+  | 'startToolExecution'
+  | 'updateToolExecution'
+  | 'completeToolExecution'
+  | 'getToolExecution'
+  | 'enableTool'
+  | 'disableTool'
+  | 'enableAllTools'
+  | 'disableAllTools'
+  | 'isToolEnabled'
+  | 'loadToolEnablementState'
+> = {
   availableTools: [],
   detectedTools: [],
   toolExecutions: {},
@@ -50,7 +65,7 @@ export const useToolStore = create<ToolState>()(
         set({ availableTools: tools });
         console.log('[ToolStore] Available tools updated:', tools);
         eventBus.emit('tool:list-updated', { tools });
-        
+
         // Load tool enablement state from storage
         get().loadToolEnablementState();
       },
@@ -97,13 +112,13 @@ export const useToolStore = create<ToolState>()(
           }));
           console.log(`[ToolStore] Execution updated (ID: ${id}):`, updatedExecution);
           if (updatedExecution.status === 'success' || updatedExecution.status === 'error') {
-             eventBus.emit('tool:execution-completed', { execution: updatedExecution });
+            eventBus.emit('tool:execution-completed', { execution: updatedExecution });
           }
         } else {
           console.warn(`[ToolStore] Attempted to update non-existent execution (ID: ${id})`);
         }
       },
-      
+
       completeToolExecution: (id: string, result: any, status: 'success' | 'error', error?: string) => {
         const execution = get().toolExecutions[id];
         if (execution) {
@@ -121,7 +136,11 @@ export const useToolStore = create<ToolState>()(
           console.log(`[ToolStore] Execution ${status} (ID: ${id}):`, completedExecution);
           eventBus.emit('tool:execution-completed', { execution: completedExecution });
           if (status === 'error') {
-            eventBus.emit('tool:execution-failed', { toolName: execution.toolName, error: error || 'Unknown execution error', callId: id });
+            eventBus.emit('tool:execution-failed', {
+              toolName: execution.toolName,
+              error: error || 'Unknown execution error',
+              callId: id,
+            });
           }
         } else {
           console.warn(`[ToolStore] Attempted to complete non-existent execution (ID: ${id})`);
@@ -137,8 +156,8 @@ export const useToolStore = create<ToolState>()(
         set(state => {
           const newEnabledTools = new Set([...state.enabledTools, toolName]);
           // Save to storage asynchronously
-          saveToolEnablementState(newEnabledTools).catch(error => 
-            console.error('[ToolStore] Failed to save tool enablement state:', error)
+          saveToolEnablementState(newEnabledTools).catch(error =>
+            console.error('[ToolStore] Failed to save tool enablement state:', error),
           );
           return { enabledTools: newEnabledTools };
         });
@@ -150,8 +169,8 @@ export const useToolStore = create<ToolState>()(
           const newEnabledTools = new Set(state.enabledTools);
           newEnabledTools.delete(toolName);
           // Save to storage asynchronously
-          saveToolEnablementState(newEnabledTools).catch(error => 
-            console.error('[ToolStore] Failed to save tool enablement state:', error)
+          saveToolEnablementState(newEnabledTools).catch(error =>
+            console.error('[ToolStore] Failed to save tool enablement state:', error),
           );
           return { enabledTools: newEnabledTools };
         });
@@ -162,8 +181,8 @@ export const useToolStore = create<ToolState>()(
         set(state => {
           const newEnabledTools = new Set(state.availableTools.map(tool => tool.name));
           // Save to storage asynchronously
-          saveToolEnablementState(newEnabledTools).catch(error => 
-            console.error('[ToolStore] Failed to save tool enablement state:', error)
+          saveToolEnablementState(newEnabledTools).catch(error =>
+            console.error('[ToolStore] Failed to save tool enablement state:', error),
           );
           return { enabledTools: newEnabledTools };
         });
@@ -174,8 +193,8 @@ export const useToolStore = create<ToolState>()(
         const newEnabledTools = new Set<string>();
         set({ enabledTools: newEnabledTools });
         // Save to storage asynchronously
-        saveToolEnablementState(newEnabledTools).catch(error => 
-          console.error('[ToolStore] Failed to save tool enablement state:', error)
+        saveToolEnablementState(newEnabledTools).catch(error =>
+          console.error('[ToolStore] Failed to save tool enablement state:', error),
         );
         console.log('[ToolStore] All tools disabled');
       },
@@ -189,7 +208,7 @@ export const useToolStore = create<ToolState>()(
         try {
           const storedEnabledTools = await getToolEnablementState();
           const state = get();
-          
+
           // If no stored state and we have available tools, enable all by default
           if (storedEnabledTools.size === 0 && state.availableTools.length > 0) {
             const allToolsEnabled = new Set(state.availableTools.map(tool => tool.name));
@@ -207,6 +226,6 @@ export const useToolStore = create<ToolState>()(
         }
       },
     }),
-    { name: 'ToolStore', store: 'tool' }
-  )
+    { name: 'ToolStore', store: 'tool' },
+  ),
 );
